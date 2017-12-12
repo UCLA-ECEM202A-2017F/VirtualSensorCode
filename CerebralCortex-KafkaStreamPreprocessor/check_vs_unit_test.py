@@ -33,10 +33,10 @@ def check_virtual(interval: int, datapath: str, archive_path: str):
                 # "{}".format(file_list[i]), datapath, \
                 # "/Users/Shengfei/Desktop/cerebralcortex/Archive/", "{}".format(cid)])
                 os.environ['SPARK_IDENT_STRING'] = 'master{}'.format(master_num)
-                subprocess.call(["sudo", "sh", "/Users/jingxianxu/Desktop/cerebralcortex/spark-2.2.0-bin-hadoop2.7/sbin/stop-master.sh"])
-                subprocess.call(["sudo", "sh", "/Users/jingxianxu/Desktop/cerebralcortex/spark-2.2.0-bin-hadoop2.7/sbin/stop-slave.sh"])
-                subprocess.call(["sudo", "sh", "/Users/jingxianxu/Desktop/cerebralcortex/spark-2.2.0-bin-hadoop2.7/sbin/start-master.sh", "-h", "127.0.0.1", "-p", "{}".format(port_num)])
-                subprocess.call(["sudo", "sh", "/Users/jingxianxu/Desktop/cerebralcortex/spark-2.2.0-bin-hadoop2.7/sbin/start-slave.sh", "spark://127.0.0.1:{}".format(port_num)])
+                subprocess.call(["sudo", "sh", os.environ['SPARK_HOME']+"/sbin/stop-master.sh"])
+                subprocess.call(["sudo", "sh", os.environ['SPARK_HOME']+"/sbin/stop-slave.sh"])
+                subprocess.call(["sudo", "sh", os.environ['SPARK_HOME']+"/sbin/start-master.sh", "-h", "127.0.0.1", "-p", "{}".format(port_num)])
+                subprocess.call(["sudo", "sh", os.environ['SPARK_HOME']+"/sbin/start-slave.sh", "spark://127.0.0.1:{}".format(port_num)])
                 
                 subprocess.call(["spark-submit", "--conf", "spark.cores.max=1", \
 				"--master", "spark://127.0.0.1:{}".format(port_num), \
