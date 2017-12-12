@@ -72,7 +72,6 @@ def store_streams(data):
     except:
         cc_log()
 
-
 # def kafka_to_db(message: KafkaDStream):
 #     """
 #
@@ -90,7 +89,6 @@ def store_streams(data):
 ##################################
 
 #util module files
-
 import datetime
 import gzip
 import json
@@ -174,7 +172,6 @@ def rename_file(old: str):
 
 
 ##########################
-
 def json_to_datapoints(json_obj):
     if isinstance(json_obj["value"], str):
         sample = json_obj["value"]
@@ -333,8 +330,6 @@ def storeOffsetRanges(rdd):
         except:
             cc_log()
 
-
-
 ################################
 from pyspark.streaming.kafka import KafkaUtils, KafkaDStream, OffsetRange, TopicAndPartition
 #from core import CC
@@ -376,17 +371,32 @@ def spark_kafka_consumer(kafka_topic: str, ssc, broker, consumer_group_id) -> Ka
 # from core.kafka_to_cc_storage_engine import kafka_to_db
 # from pyspark.streaming import StreamingContext
 # from core.kafka_producer_cus import process_valid_file
+##################################
 
-## User Defined Query ##
-def verify_sid(msg: dict, sid: str, data_path: str) -> list:
+## User Defined Query Start ##
+# Lazily instantiated global instance of SparkSession
+def getSparkSessionInstance():
+    if ("sparkSessionSingletonInstance" not in globals()):
+        globals()["sparkSessionSingletonInstance"] = SparkSession.builder.appName("Cerebral-Cortex").getOrCreate()
+        # SparkSession \
+        #     .builder \
+        #     .config(conf=sparkConf) \
+        #     .getOrCreate()
+    return globals()["sparkSessionSingletonInstance"]
+
+
+def verify_sid(msg: dict, sid: str, data_path: str) -> bool:
     if not isinstance(msg["metadata"], dict):
         metadata_header = json.loads(msg["metadata"])
     else:
         metadata_header = msg["metadata"]
 
     identifier = metadata_header["identifier"] # unique identifier
-
     if identifier == sid:
+        return True
+    return False
+
+def extract_info(msg: dict, data_path: str) -> list:
         owner = metadata_header["owner"]
         name = metadata_header["name"]
         data_descriptor = metadata_header["data_descriptor"]
@@ -403,25 +413,31 @@ def verify_sid(msg: dict, sid: str, data_path: str) -> list:
             cc_log(error_log, "MISSING_DATA")
             datapoints = []
             return None
-#
-# # The virtual sensor that process accross time
-# def user_define_virtual_type_two(sid: str, mapp: dict, data_path):
-#     conf = SparkConf().setAppName("Reading files from a directory")
-#     sc   = SparkContext(conf=conf)
-#     ssc  = StreamingContext(sc, 2)
-#     filename = mapp[sid] # only one file
-#     lines = ssc.textFileStream(data_path)
-#
-#     # Add header to data feature
-#     schema = ["identifier", "owner", "name", "data_descriptor", "start_time", "end_time", "datapoints"]
-#     df = lines.map(lambda rdd: verify_sid(rdd, sid, data_path)).toDF(schema) # check if the file has the desired sensor id (sid) transfer to DF and process
-#     df = df.select("start_time", "end_time", "datapoints")
-#     # Process the avg here #
-#     # Process the max here #
-#     # Process the min here #
-#     # define process for across time virtual sensor
-#     # store into the database
-#
+
+#######################
+def process(rdd: list):
+    print("========= %s =========" % str(time))
+    try:
+        # Get the singleton instance of SparkSession
+        spark = getSparkSessionInstance()
+
+        ##### Example process
+        myRdd = rdd.flatMap(lambda line: line.split(" ")).map(lambda word: (word, 1)).reduceByKey(lambda a, b: a+b)
+        #### End of example
+
+        # Convert RDD[String] to RDD[Row] to DataFrame
+        rowRdd = rdd.map(lambda w: Row(word=w))
+        wordsDataFrame = spark.createDataFrame(rowRdd)
+
+        # Creates a temporary view using the DataFrame
+        wordsDataFrame.createOrReplaceTempView("words")
+
+        # Do word count on table using SQL and print it
+        wordCountsDataFrame = spark.sql("select word, count(*) as total from words group by word")
+        wordCountsDataFrame.show()
+    except:
+        pass
+
 # # The virtual sensor that only process on one stream
 # def user_define_virtual_type_one(sid: str, msg: dict, datapath):
 #     stream = verify_sid(msg, sid, datapath)
@@ -435,18 +451,18 @@ def verify_sid(msg: dict, sid: str, data_path: str) -> list:
 #
 # def virtual_sensor(sid_in(one or multiple), sid_out, process(time, function))
 # # end of User Defined Query ##
-#
-def import_from(path):
-    """
-    Import an attribute, function or class from a module.
-    :attr path: A path descriptor in the form of 'pkg.module.submodule:attribute'
-    :type path: str
-    """
-    path_parts = path.split(':')
-    if len(path_parts) < 2:
-        raise ImportError("path must be in the form of pkg.module.submodule:attribute")
-    module = __import__(path_parts[0], fromlist=path_parts[1])
-    return getattr(module, path_parts[1])
+
+# def import_from(path):
+#     """
+#     Import an attribute, function or class from a module.
+#     :attr path: A path descriptor in the form of 'pkg.module.submodule:attribute'
+#     :type path: str
+#     """
+#     path_parts = path.split(':')
+#     if len(path_parts) < 2:
+#         raise ImportError("path must be in the form of pkg.module.submodule:attribute")
+#     module = __import__(path_parts[0], fromlist=path_parts[1])
+#     return getattr(module, path_parts[1])
 
 def process_valid_file(message: KafkaDStream, data_path: str, sensor_id: str):
     """
@@ -455,13 +471,11 @@ def process_valid_file(message: KafkaDStream, data_path: str, sensor_id: str):
     """
     records = message.map(lambda r: json.loads(r[1])) # filename
     valid_records = records.filter(lambda rdd: verify_fields(rdd, data_path))
-    results = valid_records.map(lambda rdd: file_processor(rdd, data_path)))
-
-    # results = valid_records.map(lambda rdd: file_processor(rdd, data_path)).map(store_stream)
-    #
-    # storeOffsetRanges(message)
-    #
+    valid_sensors = valid_records.filter(lambda rdd: verify_sid(rdd, sid, data_path))
+    results = valid_sensors.map(lambda rdd: file_processor(rdd, data_path))) # rdd of list [identifier, owner, name, data_descriptor, start_time, end_time, datapoints]
     print ("Great")
+    results.map(lambda rdd: process(rdd))
+
 
 def read_udf(data_path: str, file_name: str):
     with open(data_path+file_name) as json_data:
@@ -475,11 +489,13 @@ def read_udf(data_path: str, file_name: str):
 
 # =============================================================================
 # Kafka Consumer Configs
-
 batch_duration = 5  # seconds
-ssc = StreamingContext(CC.getOrCreateSC(type="sparkContext"), batch_duration)
-CC.getOrCreateSC(type="sparkContext").setLogLevel("WARN")
-spark = CC.getOrCreateSC(type="sparkSession")
+sc = SparkContext("spark://127.0.0.1:8083", "Cerebral-Cortex")
+# master_port = sys.argv[5]
+# sc = SparkContext(master_port, "Cerebral-Cortex")
+sc.setLogLevel("WARN")
+ssc = StreamingContext(sc, batch_duration)
+# spark = SparkSession.builder.appName("kakade").getOrCreate()
 broker = "localhost:9092"  # multiple brokers can be passed as comma separated values
 
 data_path = sys.argv[1]
@@ -499,12 +515,10 @@ virtual_sensor = read_udf(archive_path, file_name)
 sensor_id = virtual_sensor["sid"]
 
 kafka_files_stream = spark_kafka_consumer(["filequeue"], ssc, broker, consumer_group_id)
-
-name = kafka_files_stream.map(lambda rdd: ) # get file name and then use structured streaming type 1
-
-record = spark.readStream.csv("/Users/Shengfei/Desktop/cerebralcortex/data/"+name) # todo: add schema
-
 kafka_files_stream.foreachRDD(lambda rdd: process_valid_file(rdd, data_path, sensor_id)) # store or create DF() process -> type 0
+
+# name = kafka_files_stream.map(lambda rdd: ) # get file name and then use structured streaming type 1
+# record = spark.readStream.csv("/Users/Shengfei/Desktop/cerebralcortex/data/"+name) # todo: add schema
 
 # ssc.start()
 # ssc.awaitTermination()
