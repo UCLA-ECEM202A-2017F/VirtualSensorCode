@@ -1,0 +1,16 @@
+QUESTIONS:
+stream name, owner ID, and method name are used to uniquely identify a stream. Current, schema has an array of method names. Which name would be used then? first? Currently I am using first element of array (StoreMetadata#146)
+Answer:
+
+
+One algo per input/output?
+Answer: Per module (if algorithm or module produce any stream that should be persisted)
+
+Schema flow is CHANGED! this may cause some/many bugs
+
+NOTE:
+start/end time could be removed from save-stream-object
+use parse to convert string to date and don't use -13 to convert datetime to mysql format
+
+BUG:
+duplicate records in mysql

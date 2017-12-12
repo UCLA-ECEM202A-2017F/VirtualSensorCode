@@ -1,0 +1,4 @@
+py4j
+pytz==2017.2
+PyYAML==3.12
+Pympler==0.5

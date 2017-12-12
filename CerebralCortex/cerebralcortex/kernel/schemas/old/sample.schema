@@ -1,0 +1,19 @@
+{
+  "id": "https://raw.githubusercontent.com/MD2Korg/CerebralCortex/master/cerebralcortex/kernel/schemas/#",
+  "$schema": "http://json-schema.org/schema#",
+  "title": "Sample Schema",
+  "description": "Specific Specification of the sample field",
+  "anyOf": [
+    {
+      "type": "array"
+    },
+    {
+      "type": "number"
+    },
+    {
+      "type": "object"
+    }
+  ],
+  "additionalProperties": false
+}
+

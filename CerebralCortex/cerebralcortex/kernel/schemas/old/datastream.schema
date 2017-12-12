@@ -1,0 +1,70 @@
+{
+  "id": "https://raw.githubusercontent.com/MD2Korg/CerebralCortex/master/cerebralcortex/kernel/schemas/#",
+  "$schema": "http://json-schema.org/schema#",
+  "title": "DataStream schema",
+  "description": "",
+  "type": "object",
+  "properties": {
+    "identifier": {
+      "description": "",
+      "type": "number"
+    },
+    "user": {
+      "description": "",
+      "type": "string",
+      "pattern": "^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}$"
+    },
+    "name": {
+      "description": "",
+      "type": "string"
+    },
+    "data_descriptor": {
+      "description": "",
+      "type": "array",
+      "items": {
+        "$ref": "data_descriptor_item.schema#"
+      }
+    },
+    "execution_context": {
+      "description": "",
+      "type": "object",
+      "properties": {
+        "processing_module": {
+          "description": "",
+          "type": "number"
+        },
+        "input_parameters": {
+          "description": "",
+          "type": "array",
+          "items": {
+            "$ref": "input_parameters_item.schema#"
+          }
+        },
+        "input_streams": {
+          "description": "",
+          "type": "array",
+          "items": {
+            "$ref": "stream_item.schema#"
+          }
+        }
+      },
+      "required": [
+        "processing_module"
+      ]
+    },
+    "annotations": {
+      "description": "",
+      "type": "array",
+      "items": {
+        "$ref": "stream_item.schema#"
+      }
+    }
+  },
+  "required": [
+    "identifier",
+    "user",
+    "name",
+    "data_descriptor",
+    "execution_context"
+  ]
+}

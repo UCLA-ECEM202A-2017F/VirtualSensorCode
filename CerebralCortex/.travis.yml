@@ -1,0 +1,16 @@
+language: python
+python:
+  - "3.5"
+
+env:
+    global:
+        - SPARK_HOME=/analyze_quality/spark-2.0.2-bin-hadoop2.7
+
+# command to install dependencies
+install:
+  - ./install-spark.sh
+  - "pip install -r requirements.txt"
+
+
+# command to run tests
+script: ./run-tests.sh
