@@ -371,45 +371,44 @@ def spark_kafka_consumer(kafka_topic: str, ssc, broker, consumer_group_id) -> Ka
         print(e)
 
 ##################################
-import shutil
-import time
-import os
-from threading import Thread
-import subprocess
-
-def check_virtual(interval: int, datapath: str):
-    start = time.time()
-    cid = 1
-    while(True):
-        # print ("I M THE BEST")
-        end = time.time()
-        if(end - start >= interval):
-            file_list = os.listdir(datapath)
-			# print file_list
-            for i in range(0, len(file_list)):
-                print ("I got file")
-                import shutil
-                import os
-
-                def delete_processed_vs (data_path: str, archive_path: str, file_name: str):
-                    shutil.move(os.path.join(data_path, file_name), os.path.join(archive_path, file_name))
-                subprocess.Popen(["sudo", "sh", "run.sh"])
-                subprocess.Popen(["spark-submit", "--conf", "spark.cores.max=1", \
-                " --master spark://127.0.0.1:8083", "--package", \
-                "org.apache.spark:spark-streaming-kafka-0-8_2.11:2.2.0,com.datastax.spark:spark-cassandra-connector_2.11:2.0.1 create_session.py", \
-                "/Users/Shengfei/Desktop/cerebralcortex/data/", \
-                "{}".format(file_list[i]), datapath, \
-                "/Users/Shengfei/Desktop/cerebralcortex/Archive/", "{}".format(cid)])
-                cid += 1
-            start = time.time()
-
-
+# import shutil
+# import time
+# import os
+# from threading import Thread
+# import subprocess
+#
+# def check_virtual(interval: int, datapath: str):
+#     start = time.time()
+#     cid = 1
+#     while(True):
+#         # print ("I M THE BEST")
+#         end = time.time()
+#         if(end - start >= interval):
+#             file_list = os.listdir(datapath)
+# 			# print file_list
+#             for i in range(0, len(file_list)):
+#                 print ("I got file")
+#                 import shutil
+#                 import os
+#
+#                 def delete_processed_vs (data_path: str, archive_path: str, file_name: str):
+#                     shutil.move(os.path.join(data_path, file_name), os.path.join(archive_path, file_name))
+#                 subprocess.Popen(["sudo", "sh", "run.sh"])
+#                 subprocess.Popen(["spark-submit", "--conf", "spark.cores.max=1", \
+#                 " --master spark://127.0.0.1:8083", "--package", \
+#                 "org.apache.spark:spark-streaming-kafka-0-8_2.11:2.2.0,com.datastax.spark:spark-cassandra-connector_2.11:2.0.1 create_session.py", \
+#                 "/Users/Shengfei/Desktop/cerebralcortex/data/", \
+#                 "{}".format(file_list[i]), datapath, \
+#                 "/Users/Shengfei/Desktop/cerebralcortex/Archive/", "{}".format(cid)])
+#                 cid += 1
+#             start = time.time()
+#
 # Kafka Consumer Configs
 batch_duration = 5  # seconds
 
 #master URL
-sc = SparkContext("spark://127.0.0.1:8081", "Cerebral-Cortex")
-
+# sc = SparkContext("spark://127.0.0.1:8081", "Cerebral-Cortex")
+sc = SparkContext(appName="Cerebral-Cortex")
 #sc = SparkContext("local[2]", "Cerebral-Cortex")
 
 sc.setLogLevel("WARN")
@@ -428,10 +427,10 @@ data_path = sys.argv[1]
 if (data_path[-1] != '/'):
     data_path += '/'
 
-vs = "/Users/Shengfei/Desktop/cerebralcortex/VirtualSensor/"
-interval = 10
-check = Thread(target = check_virtual, args = (20, vs))
-check.start()
+# vs = "/Users/Shengfei/Desktop/cerebralcortex/VirtualSensor/"
+# interval = 10
+# check = Thread(target = check_virtual, args = (20, vs))
+# check.start()
 
 kafka_files_stream = spark_kafka_consumer(["filequeue"], ssc, broker, consumer_group_id)
 kafka_files_stream.foreachRDD(lambda rdd: kafka_file_to_json_producer(rdd, data_path))

@@ -24,13 +24,16 @@
 
 import time
 import sys
-from pyspark import SparkContext
+from pyspark import SparkContext, SparkConf
 #from core import CC
 #from core.kafka_consumer import spark_kafka_consumer
 #from core.kafka_to_cc_storage_engine import kafka_to_db
 from pyspark.streaming import StreamingContext
 #from core.kafka_producer import kafka_file_to_json_producer
-
+from pyspark.sql import SparkSession, SQLContext
+from pyspark.sql.functions import *
+from pyspark.sql.types import *
+from pyspark.ml.feature import Tokenizer, RegexTokenizer, StopWordsRemover, CountVectorizer
 
 ##########################################
 import json
@@ -396,17 +399,43 @@ def verify_sid(msg: dict, sid: str, data_path: str) -> bool:
         return True
     return False
 
-def extract_info(msg: dict, data_path: str) -> list:
+
+def row_to_datapoint_cus(row: str) -> dict:
+    ts, offset, values = row.split(',', 2)
+    ts = int(ts) / 1000.0
+    offset = int(offset)
+
+    if isinstance(values, tuple):
+        values = list(values)
+    else:
+        try:
+            values = json.loads(values)
+        except:
+            try:
+                values = [float(values)]
+            except:
+                try:
+                    values = list(map(float, values.split(',')))
+                except:
+                    values = values
+
+    timezone = datetime.timezone(datetime.timedelta(milliseconds=offset))
+    ts = datetime.datetime.fromtimestamp(ts, timezone)
+    # return DataPoint(start_time=ts, sample=values)
+    return {'time': str(ts), 'value': values}
+
+
+def extract_info(msg: dict, data_path: str) -> dict:
         owner = metadata_header["owner"]
         name = metadata_header["name"]
         data_descriptor = metadata_header["data_descriptor"]
         execution_context = metadata_header["execution_context"]
         try:
             gzip_file_content = get_gzip_file_contents(data_path + msg["filename"])
-            datapoints = list(map(lambda x: row_to_datapoint(x), gzip_file_content.splitlines()))
+            datapoints = list(map(lambda x: row_to_datapoint_cus(x), gzip_file_content.splitlines()))
             start_time = datapoints[0].start_time
             end_time = datapoints[len(datapoints) - 1].end_time
-            return [identifier, owner, name, data_descriptor, start_time, end_time, datapoints]
+            return [identifier, owner, name, data_descriptor, start_time, end_time, datapoints] #list of dictionary
 
         except Exception as e:
             error_log = "In Kafka preprocessor - Error in processing file: " + str(msg["filename"])+" Owner-ID: "+owner + "Stream Name: "+name + " - " + str(e)
@@ -415,42 +444,34 @@ def extract_info(msg: dict, data_path: str) -> list:
             return None
 
 #######################
-def process(rdd: list):
+def process(data: list):
     print("========= %s =========" % str(time))
     try:
         # Get the singleton instance of SparkSession
         spark = getSparkSessionInstance()
-
+        rdd = spark.sparkContext.parallelize(data[6])
+        df = rdd.toDF()
+        df.select(mean(df["value"][0]), mean(df["value"][1])).show()
+        df.show()
         ##### Example process
-        myRdd = rdd.flatMap(lambda line: line.split(" ")).map(lambda word: (word, 1)).reduceByKey(lambda a, b: a+b)
+        # myRdd = data.flatMap(lambda line: line.split(" ")).map(lambda word: (word, 1)).reduceByKey(lambda a, b: a+b)
+        # rowRdd = myRdd.map(lambda w: Row(word=w[0], Count=w[1]))
+        # df = spark.createDataFrame(rowRdd)
+        # df.show()
         #### End of example
-
-        # Convert RDD[String] to RDD[Row] to DataFrame
-        rowRdd = rdd.map(lambda w: Row(word=w))
-        wordsDataFrame = spark.createDataFrame(rowRdd)
-
-        # Creates a temporary view using the DataFrame
-        wordsDataFrame.createOrReplaceTempView("words")
-
-        # Do word count on table using SQL and print it
-        wordCountsDataFrame = spark.sql("select word, count(*) as total from words group by word")
-        wordCountsDataFrame.show()
+        #
+        # # Convert RDD[String] to RDD[Row] to DataFrame
+        # rowRdd = rdd.map(lambda w: Row(word=w))
+        # wordsDataFrame = spark.createDataFrame(rowRdd)
+        #
+        # # Creates a temporary view using the DataFrame
+        # wordsDataFrame.createOrReplaceTempView("words")
+        #
+        # # Do word count on table using SQL and print it
+        # wordCountsDataFrame = spark.sql("select word, count(*) as total from words group by word")
+        # wordCountsDataFrame.show()
     except:
         pass
-
-# # The virtual sensor that only process on one stream
-# def user_define_virtual_type_one(sid: str, msg: dict, datapath):
-#     stream = verify_sid(msg, sid, datapath)
-#     for data in stream:
-#         # process here for average/min/max (define process)
-#         result = # function #
-#         # save result to database
-#     return result
-#
-# def take_user_input
-#
-# def virtual_sensor(sid_in(one or multiple), sid_out, process(time, function))
-# # end of User Defined Query ##
 
 # def import_from(path):
 #     """
@@ -472,7 +493,7 @@ def process_valid_file(message: KafkaDStream, data_path: str, sensor_id: str):
     records = message.map(lambda r: json.loads(r[1])) # filename
     valid_records = records.filter(lambda rdd: verify_fields(rdd, data_path))
     valid_sensors = valid_records.filter(lambda rdd: verify_sid(rdd, sid, data_path))
-    results = valid_sensors.map(lambda rdd: file_processor(rdd, data_path))) # rdd of list [identifier, owner, name, data_descriptor, start_time, end_time, datapoints]
+    results = valid_sensors.map(lambda rdd: extract_info(rdd, data_path)) # rdd of list [identifier, owner, name, data_descriptor, start_time, end_time, datapoints]
     print ("Great")
     results.map(lambda rdd: process(rdd))
 
@@ -483,14 +504,15 @@ def read_udf(data_path: str, file_name: str):
         sid = dt['input_id']
         osid = dt['output_id']
         time_interval = dt['interval']
-        endt = dt['endtime']
+        endt = dt['end_time']
         process = dt['process']
     return [sid, osid, time_interval, endt, process]
 
 # =============================================================================
 # Kafka Consumer Configs
 batch_duration = 5  # seconds
-sc = SparkContext("spark://127.0.0.1:8083", "Cerebral-Cortex")
+# sc = SparkContext("spark://127.0.0.1:8083", "Cerebral-Cortex")
+sc = SparkContext(appName="Cerebral-Cortex")
 # master_port = sys.argv[5]
 # sc = SparkContext(master_port, "Cerebral-Cortex")
 sc.setLogLevel("WARN")
@@ -502,17 +524,17 @@ data_path = sys.argv[1]
 if (data_path[-1] != '/'):
     data_path += '/'
 
-archive_path = sys.argv[3]
+archive_path = sys.argv[2]
 if (archive_path[-1] != '/'):
     archive_path += '/'
 
 group_id = sys.argv[4]
 consumer_group_id = "md2k-test" + str(group_id)
 
-file_name = sys.argv[2]
+file_name = sys.argv[3]
 
 virtual_sensor = read_udf(archive_path, file_name)
-sensor_id = virtual_sensor["sid"]
+sensor_id = virtual_sensor[0]
 
 kafka_files_stream = spark_kafka_consumer(["filequeue"], ssc, broker, consumer_group_id)
 kafka_files_stream.foreachRDD(lambda rdd: process_valid_file(rdd, data_path, sensor_id)) # store or create DF() process -> type 0
@@ -520,5 +542,5 @@ kafka_files_stream.foreachRDD(lambda rdd: process_valid_file(rdd, data_path, sen
 # name = kafka_files_stream.map(lambda rdd: ) # get file name and then use structured streaming type 1
 # record = spark.readStream.csv("/Users/Shengfei/Desktop/cerebralcortex/data/"+name) # todo: add schema
 
-# ssc.start()
-# ssc.awaitTermination()
+ssc.start()
+ssc.awaitTermination()
