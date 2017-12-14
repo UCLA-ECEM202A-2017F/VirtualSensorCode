@@ -96,7 +96,6 @@ import datetime
 import gzip
 import json
 from pympler import asizeof
-
 from cerebralcortex.kernel.datatypes.datastream import DataStream, DataPoint
 from dateutil.parser import parse
 
@@ -123,6 +122,7 @@ def chunks(data: str, max_len: int) -> str:
     for i in range(0, len(data), max_len):
         yield data[i:i + max_len]
 
+
 def get_chunk_size(data):
 
     if len(data) > 0:
@@ -130,6 +130,7 @@ def get_chunk_size(data):
         return round(chunk_size)
     else:
         return 100
+
 
 def row_to_datapoint(row: str) -> dict:
     """
@@ -172,7 +173,6 @@ def rename_file(old: str):
     new_file_name = str.replace(old, old_file_name, new_file_name)
     # if os.path.isfile(old):
     #     os.rename(old, new_file_name)
-
 
 ##########################
 def json_to_datapoints(json_obj):
@@ -219,7 +219,6 @@ import os
 from cerebralcortex.kernel.datatypes.datastream import DataStream
 from datetime import datetime
 from cerebralcortex.kernel.utils.logging import cc_log
-
 #from core import CC
 #from core.kafka_offset import storeOffsetRanges
 from pyspark.streaming.kafka import KafkaDStream
@@ -375,8 +374,8 @@ def spark_kafka_consumer(kafka_topic: str, ssc, broker, consumer_group_id) -> Ka
 # from pyspark.streaming import StreamingContext
 # from core.kafka_producer_cus import process_valid_file
 ##################################
-
 ## User Defined Query Start ##
+
 # Lazily instantiated global instance of SparkSession
 def getSparkSessionInstance():
     if ("sparkSessionSingletonInstance" not in globals()):
@@ -445,7 +444,7 @@ def extract_info(msg: dict, data_path: str) -> dict:
 
 #######################
 def process(data: list):
-    print("========= %s =========" % str(time))
+    # print("========= %s =========" % str(time))
     try:
         # Get the singleton instance of SparkSession
         spark = getSparkSessionInstance()
@@ -490,12 +489,77 @@ def process_valid_file(message: KafkaDStream, data_path: str, sensor_id: str):
     Read convert gzip file data into json object and publish it on Kafka
     :param message:
     """
+
     records = message.map(lambda r: json.loads(r[1])) # filename
     valid_records = records.filter(lambda rdd: verify_fields(rdd, data_path))
     valid_sensors = valid_records.filter(lambda rdd: verify_sid(rdd, sid, data_path))
     results = valid_sensors.map(lambda rdd: extract_info(rdd, data_path)) # rdd of list [identifier, owner, name, data_descriptor, start_time, end_time, datapoints]
-    print ("Great")
-    results.map(lambda rdd: process(rdd))
+    # results.map(lambda rdd: process(rdd))
+    # print ("Great")
+    # ... check buffer
+    # assume sorted
+    # results_list = results.collect()[6]
+
+    # interval should be passed in
+    # buffer is like a user defined window
+    # buffer format is [start, end, [dict of datapoints]]
+    results_list = results.collect()
+    file_data = results_list[6]
+    file_start = results_list[4]
+    file_end = results_list[5]
+
+    # while file has not been fully processed
+    while file_data != []:
+        # based on data time
+        # first time or just sent clearly:
+        if buffer_list[2] == []:
+            if file_end - file_start < interval:
+                buffer_list = [file_start, file_end, file_data]
+                file_data = []
+
+            else:
+                cur_data = sc.parallelize(file_data)
+                cur_rdd = cur_data.filter(lambda x: x["time"] <= datetime.datetime.fromtimestamp(file_start + interval / 1e3))
+                remain_rdd = cur_data.filter(lambda x: x["time"] > datetime.datetime.fromtimestamp(file_start + nterval / 1e3))
+                cur_rdd.map(lambda rdd: process(rdd))
+                # if clear, file_data = []
+                file_data = remain_rdd.collect()
+                file_start = file_data[0]["time"]
+                file_end = file_data[len(file_data)-1]["time"]
+                # add window time or offset to be the difference between file_start time and window time e.g window = 5s, start = 6s, offset = 1s
+                buffer_list = [file_start, file_end, file_data]
+        # buffer has data remaining
+        else:
+            if file_start - buffer_list[0] > interval:
+                # send
+                new_res = sc.parallelize(buffer_list[2])
+                new_res.map(lambda rdd: process(rdd))
+                buffer_list[2] = []
+                # prev end time is the new window start time
+                file_start = buffer_list[1]
+
+            else:
+                # buffer data time sum
+                offset = buffer_list[1] - buffer_list[0]
+                # all in unix time
+                # file too long or just fit
+                if file_end - file_start + offset >= interval:
+                    cur_data = sc.parallelize(file_data)
+                    cur_rdd = cur_data.filter(lambda x: x["time"] <= datetime.datetime.fromtimestamp(interval / 1e3))
+                    pre_rdd = sc.parallelize(buffer_list[2])
+                    new_rdd = pre_rdd.union(cur_rdd)
+                    new_rdd.map(lambda rdd: process(rdd))
+                    buffer_list[2] = []
+                    remain_rdd = cur_data.filter(lambda x: x["time"] > datetime.datetime.fromtimestamp(interval / 1e3))
+                    # update new file_data
+                    file_data = remain_rdd.collect()
+                    # note: should change this to prev end
+                    file_start = file_data[0]["time"]
+
+                # file too short
+                else:
+                    buffer_list[2] += file_data
+                    buffer_list[1] = file_end
 
 
 def read_udf(data_path: str, file_name: str):
@@ -503,9 +567,9 @@ def read_udf(data_path: str, file_name: str):
         dt = json.load(json_data)
         sid = dt['input_id']
         osid = dt['output_id']
-        time_interval = dt['interval']
+        time_interval = dt['interval'] # output every interval time
         endt = dt['end_time']
-        process = dt['process']
+        process = dt['process'] # module.process
     return [sid, osid, time_interval, endt, process]
 
 # =============================================================================
@@ -517,7 +581,7 @@ sc = SparkContext(appName="Cerebral-Cortex")
 # sc = SparkContext(master_port, "Cerebral-Cortex")
 sc.setLogLevel("WARN")
 ssc = StreamingContext(sc, batch_duration)
-# spark = SparkSession.builder.appName("kakade").getOrCreate()
+# spark = SparkSession.builder.appName("xxx").getOrCreate()
 broker = "localhost:9092"  # multiple brokers can be passed as comma separated values
 
 data_path = sys.argv[1]
@@ -539,8 +603,10 @@ sensor_id = virtual_sensor[0]
 kafka_files_stream = spark_kafka_consumer(["filequeue"], ssc, broker, consumer_group_id)
 kafka_files_stream.foreachRDD(lambda rdd: process_valid_file(rdd, data_path, sensor_id)) # store or create DF() process -> type 0
 
+# window & process
 # name = kafka_files_stream.map(lambda rdd: ) # get file name and then use structured streaming type 1
+# spark = getSparkSessionInstance()
 # record = spark.readStream.csv("/Users/Shengfei/Desktop/cerebralcortex/data/"+name) # todo: add schema
 
-ssc.start()
-ssc.awaitTermination()
+# ssc.start()
+# ssc.awaitTermination()

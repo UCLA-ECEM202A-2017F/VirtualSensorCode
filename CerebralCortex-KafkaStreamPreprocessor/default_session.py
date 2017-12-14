@@ -333,7 +333,6 @@ def storeOffsetRanges(rdd):
             cc_log()
 
 
-
 ################################
 from pyspark.streaming.kafka import KafkaUtils, KafkaDStream, OffsetRange, TopicAndPartition
 #from core import CC

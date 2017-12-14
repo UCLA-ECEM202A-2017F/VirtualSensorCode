@@ -15,22 +15,19 @@ def check_virtual(interval: int, datapath: str, archive_path: str):
     start = time.time()
     master_num = 1
     cid = 1
-    port_num = 8081
+    port_num = 10000
 
-    # os.environ['SPARK_IDENT_STRING'] = 'master{}'.format(master_num)
-    # subprocess.call(["sudo", "sh", "/Users/Shengfei/Desktop/Spark-Archive/spark-2.2.0-bin-hadoop2.7/sbin/stop-master.sh"])
-    # subprocess.call(["sudo", "sh", "/Users/Shengfei/Desktop/Spark-Archive/spark-2.2.0-bin-hadoop2.7/sbin/stop-slave.sh"])
-    # subprocess.call(["sudo", "sh", "/Users/Shengfei/Desktop/Spark-Archive/spark-2.2.0-bin-hadoop2.7/sbin/start-master.sh", "-h", "127.0.0.1", "-p", "{}".format(port_num)])
-    # subprocess.call(["sudo", "sh", "/Users/Shengfei/Desktop/Spark-Archive/spark-2.2.0-bin-hadoop2.7/sbin/start-slave.sh", "spark://127.0.0.1:{}".format(port_num)])
-    #
-    # subprocess.call(["spark-submit", "--conf", "spark.cores.max=1", \
-    # "--master", "spark://127.0.0.1:{}".format(port_num), \
-    # "--packages", "org.apache.spark:spark-streaming-kafka-0-8_2.11:2.2.0,com.datastax.spark:spark-cassandra-connector_2.11:2.0.1", \
-    # "test.py",
-    # "/Users/Shengfei/Desktop/cerebralcortex/data/"
-    # ])
-    # master_num += 1
-    # port_num += 2
+    os.environ['SPARK_IDENT_STRING'] = 'master{}'.format(master_num)
+    subprocess.call(["sudo", "sh", "/Users/Shengfei/Desktop/Spark-Archive/spark-2.2.0-bin-hadoop2.7/sbin/stop-master.sh"])
+    subprocess.call(["sudo", "sh", "/Users/Shengfei/Desktop/Spark-Archive/spark-2.2.0-bin-hadoop2.7/sbin/stop-slave.sh"])
+    subprocess.call(["sudo", "sh", "/Users/Shengfei/Desktop/Spark-Archive/spark-2.2.0-bin-hadoop2.7/sbin/start-master.sh", "-h", "127.0.0.1", "-p", "{}".format(port_num)])
+    subprocess.call(["sudo", "sh", "/Users/Shengfei/Desktop/Spark-Archive/spark-2.2.0-bin-hadoop2.7/sbin/start-slave.sh", "spark://127.0.0.1:{}".format(port_num)])
+    subprocess.call(["spark-submit", "--conf", "spark.cores.max=1", \
+    "--master", "spark://127.0.0.1:{}".format(port_num), \
+    "--packages", "org.apache.spark:spark-streaming-kafka-0-8_2.11:2.2.0,com.datastax.spark:spark-cassandra-connector_2.11:2.0.1", \
+    "default_session.py", "/Users/Shengfei/Desktop/cerebralcortex/data/"])
+    master_num += 1
+    port_num += 2
 
     while(True):
         # print ("I M THE BEST")
