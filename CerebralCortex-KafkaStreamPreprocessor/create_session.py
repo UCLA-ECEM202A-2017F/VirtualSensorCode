@@ -484,7 +484,7 @@ def process(data: list):
 #     module = __import__(path_parts[0], fromlist=path_parts[1])
 #     return getattr(module, path_parts[1])
 
-def process_valid_file(message: KafkaDStream, data_path: str, sensor_id: str):
+def process_valid_file(message: KafkaDStream, data_path: str, sensor_id: str, interval: int):
     """
     Read convert gzip file data into json object and publish it on Kafka
     :param message:
@@ -496,6 +496,7 @@ def process_valid_file(message: KafkaDStream, data_path: str, sensor_id: str):
     results = valid_sensors.map(lambda rdd: extract_info(rdd, data_path)) # rdd of list [identifier, owner, name, data_descriptor, start_time, end_time, datapoints]
     # results.map(lambda rdd: process(rdd))
     # print ("Great")
+
     # ... check buffer
     # assume sorted
     # results_list = results.collect()[6]
@@ -560,7 +561,7 @@ def process_valid_file(message: KafkaDStream, data_path: str, sensor_id: str):
                 else:
                     buffer_list[2] += file_data
                     buffer_list[1] = file_end
-
+                    file_data = []
 
 def read_udf(data_path: str, file_name: str):
     with open(data_path+file_name) as json_data:
@@ -599,9 +600,10 @@ file_name = sys.argv[3]
 
 virtual_sensor = read_udf(archive_path, file_name)
 sensor_id = virtual_sensor[0]
+interval = virtual_sensor[2]
 
 kafka_files_stream = spark_kafka_consumer(["filequeue"], ssc, broker, consumer_group_id)
-kafka_files_stream.foreachRDD(lambda rdd: process_valid_file(rdd, data_path, sensor_id)) # store or create DF() process -> type 0
+kafka_files_stream.foreachRDD(lambda rdd: process_valid_file(rdd, data_path, sensor_id, interval)) # store or create DF() process -> type 0
 
 # window & process
 # name = kafka_files_stream.map(lambda rdd: ) # get file name and then use structured streaming type 1
