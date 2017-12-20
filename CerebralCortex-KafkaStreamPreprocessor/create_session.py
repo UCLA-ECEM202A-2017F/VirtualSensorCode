@@ -158,7 +158,7 @@ def row_to_datapoint(row: str) -> dict:
                     values = values
 
     timezone = datetime.timezone(datetime.timedelta(milliseconds=offset))
-    ts = datetime.datetime.fromtimestamp(ts, timezone)
+    #ts = datetime.datetime.fromtimestamp(ts, timezone)
     return DataPoint(start_time=ts, sample=values)
     #return {'starttime': str(ts), 'value': values}
 
@@ -394,61 +394,77 @@ def verify_sid(msg: dict, sid: str, data_path: str) -> bool:
         metadata_header = msg["metadata"]
 
     identifier = metadata_header["identifier"] # unique identifier
+
     if identifier == sid:
         return True
     return False
 
 
-def row_to_datapoint_cus(row: str) -> dict:
-    ts, offset, values = row.split(',', 2)
+def row_to_datapoint_cus(row: str):
+    ts, offset, values = row.split(', ', 2)
     ts = int(ts) / 1000.0
     offset = int(offset)
 
-    if isinstance(values, tuple):
-        values = list(values)
-    else:
-        try:
-            values = json.loads(values)
-        except:
-            try:
-                values = [float(values)]
-            except:
-                try:
-                    values = list(map(float, values.split(',')))
-                except:
-                    values = values
+    # if isinstance(values, tuple):
+    #     values = list(values)
+    # else:
+    #     try:
+    #         values = json.loads(values)
+    #     except:
+    #         try:
+    #             values = [float(values)]
+    #         except:
+    #             try:
+    #                 values = list(map(float, values.split(',')))
+    #             except:
+    #                 values = values
 
-    timezone = datetime.timezone(datetime.timedelta(milliseconds=offset))
-    ts = datetime.datetime.fromtimestamp(ts, timezone)
+    timezone = "UTC"#datetime.timezone(datetime.timedelta(milliseconds=offset))
+    #ts = datetime.datetime.fromtimestamp(ts, timezone)
     # return DataPoint(start_time=ts, sample=values)
-    return {'time': str(ts), 'value': values}
+    return {'time':str(ts), 'value':list(eval(values))}
 
 
-def extract_info(msg: dict, data_path: str) -> dict:
-        owner = metadata_header["owner"]
-        name = metadata_header["name"]
-        data_descriptor = metadata_header["data_descriptor"]
-        execution_context = metadata_header["execution_context"]
-        try:
-            gzip_file_content = get_gzip_file_contents(data_path + msg["filename"])
-            datapoints = list(map(lambda x: row_to_datapoint_cus(x), gzip_file_content.splitlines()))
-            start_time = datapoints[0].start_time
-            end_time = datapoints[len(datapoints) - 1].end_time
-            return [identifier, owner, name, data_descriptor, start_time, end_time, datapoints] #list of dictionary
+def extract_info(msg: list, data_path: str):
+    try:
+        metadata_header = msg["metadata"]
+        #owner = "fbf8d50c-7f1d-47aa-b958-9caeadc676bd"#metadata_header["owner"]
+        #name = metadata_header["name"]
+        #data_descriptor = metadata_header["data_descriptor"]
+        #execution_context = metadata_header["execution_context"]
+        gzip_file_content = get_gzip_file_contents(data_path + msg["filename"])
+        # gzip_file_content = get_gzip_file_contents(data_path + "6ff7c2ff-deaf-4c2f-aff5-63228ee13540.gz")
 
-        except Exception as e:
-            error_log = "In Kafka preprocessor - Error in processing file: " + str(msg["filename"])+" Owner-ID: "+owner + "Stream Name: "+name + " - " + str(e)
-            cc_log(error_log, "MISSING_DATA")
-            datapoints = []
-            return None
+        datapoints = list(map(lambda x: row_to_datapoint_cus(x), gzip_file_content.splitlines()))
+        #print(datapoints)
+        start_time = datapoints[0]["time"]
+        end_time = datapoints[len(datapoints) - 1]["time"]
+        #return [identifier, owner, name, data_descriptor, start_time, end_time, datapoints] #list of dictionary
+        #return [0, owner, "name", "data_descriptor", start_time, end_time, datapoints]
+        return datapoints
+
+    except Exception as e:
+        #error_log = "In Kafka preprocessor - Error in processing file: " + str(msg["filename"])+" Owner-ID: "+owner + "Stream Name: "+name + " - " + str(e)
+        cc_log(error_log, "MISSING_DATA")
+        datapoints = []
+        print(e)
+        return None
+
 
 #######################
 def process(data: list):
+    print("in process")
+
     # print("========= %s =========" % str(time))
     try:
+        print("In process")
         # Get the singleton instance of SparkSession
         spark = getSparkSessionInstance()
-        rdd = spark.sparkContext.parallelize(data[6])
+        test = data.collect()
+        rdd = spark.sparkContext.parallelize(test[0])
+
+        print(rdd.collect())
+
         df = rdd.toDF()
         df.select(mean(df["value"][0]), mean(df["value"][1])).show()
         df.show()
@@ -469,8 +485,9 @@ def process(data: list):
         # # Do word count on table using SQL and print it
         # wordCountsDataFrame = spark.sql("select word, count(*) as total from words group by word")
         # wordCountsDataFrame.show()
-    except:
-        pass
+    except Exception as e:
+        print(e)
+
 
 # def import_from(path):
 #     """
@@ -490,11 +507,30 @@ def process_valid_file(message: KafkaDStream, data_path: str, sensor_id: str, in
     :param message:
     """
 
-    records = message.map(lambda r: json.loads(r[1])) # filename
+    print("====== Processing in process_valid_file ======")
+    records = message.map(lambda r: json.loads(r[1])) # matadata & filename
+    # print(records.collect())
+
     valid_records = records.filter(lambda rdd: verify_fields(rdd, data_path))
-    valid_sensors = valid_records.filter(lambda rdd: verify_sid(rdd, sid, data_path))
+    print("File Iteration count-valid_records:", valid_records.count())
+
+    print("====== Processing in verify_sid ======")
+    valid_sensors = valid_records.filter(lambda rdd: verify_sid(rdd, sensor_id, data_path))
+    print("File Iteration count-valid_sensors:", valid_sensors.count())
+    print(valid_sensors.collect())
+
+    print("====== Processing in extract_info ======")
     results = valid_sensors.map(lambda rdd: extract_info(rdd, data_path)) # rdd of list [identifier, owner, name, data_descriptor, start_time, end_time, datapoints]
-    # results.map(lambda rdd: process(rdd))
+    print("Result is: ")
+    print(results.collect())
+    print("File Iteration results:", results.count())
+
+    process(results)
+
+    #results.map(lambda rdd: process(rdd))
+    #print(results.collect())
+    #results.foreach(lambda rdd: print(rdd))
+
     # print ("Great")
 
     # ... check buffer
@@ -503,65 +539,66 @@ def process_valid_file(message: KafkaDStream, data_path: str, sensor_id: str, in
 
     # interval should be passed in
     # buffer is like a user defined window
-    # buffer format is [start, end, [dict of datapoints]]
-    results_list = results.collect()
-    file_data = results_list[6]
-    file_start = results_list[4]
-    file_end = results_list[5]
-
-    # while file has not been fully processed
-    while file_data != []:
-        # based on data time
-        # first time or just sent clearly:
-        if buffer_list[2] == []:
-            if file_end - file_start < interval:
-                buffer_list = [file_start, file_end, file_data]
-                file_data = []
-
-            else:
-                cur_data = sc.parallelize(file_data)
-                cur_rdd = cur_data.filter(lambda x: x["time"] <= datetime.datetime.fromtimestamp(file_start + interval / 1e3))
-                remain_rdd = cur_data.filter(lambda x: x["time"] > datetime.datetime.fromtimestamp(file_start + nterval / 1e3))
-                cur_rdd.map(lambda rdd: process(rdd))
-                # if clear, file_data = []
-                file_data = remain_rdd.collect()
-                file_start = file_data[0]["time"]
-                file_end = file_data[len(file_data)-1]["time"]
-                # add window time or offset to be the difference between file_start time and window time e.g window = 5s, start = 6s, offset = 1s
-                buffer_list = [file_start, file_end, file_data]
-        # buffer has data remaining
-        else:
-            if file_start - buffer_list[0] > interval:
-                # send
-                new_res = sc.parallelize(buffer_list[2])
-                new_res.map(lambda rdd: process(rdd))
-                buffer_list[2] = []
-                # prev end time is the new window start time
-                file_start = buffer_list[1]
-
-            else:
-                # buffer data time sum
-                offset = buffer_list[1] - buffer_list[0]
-                # all in unix time
-                # file too long or just fit
-                if file_end - file_start + offset >= interval:
-                    cur_data = sc.parallelize(file_data)
-                    cur_rdd = cur_data.filter(lambda x: x["time"] <= datetime.datetime.fromtimestamp(interval / 1e3))
-                    pre_rdd = sc.parallelize(buffer_list[2])
-                    new_rdd = pre_rdd.union(cur_rdd)
-                    new_rdd.map(lambda rdd: process(rdd))
-                    buffer_list[2] = []
-                    remain_rdd = cur_data.filter(lambda x: x["time"] > datetime.datetime.fromtimestamp(interval / 1e3))
-                    # update new file_data
-                    file_data = remain_rdd.collect()
-                    # note: should change this to prev end
-                    file_start = file_data[0]["time"]
-
-                # file too short
-                else:
-                    buffer_list[2] += file_data
-                    buffer_list[1] = file_end
-                    file_data = []
+    # # buffer format is [start, end, [dict of datapoints]]
+    # # Type 1
+    # results_list = results.collect()
+    # file_data = results_list[6]
+    # file_start = results_list[4]
+    # file_end = results_list[5]
+    #
+    # # while file has not been fully processed
+    # while file_data != []:
+    #     # based on data time
+    #     # first time or just sent clearly:
+    #     if buffer_list[2] == []:
+    #         if file_end - file_start < interval:
+    #             buffer_list = [file_start, file_end, file_data]
+    #             file_data = []
+    #
+    #         else:
+    #             cur_data = sc.parallelize(file_data)
+    #             cur_rdd = cur_data.filter(lambda x: x["time"] <= datetime.datetime.fromtimestamp(file_start + interval / 1e3))
+    #             remain_rdd = cur_data.filter(lambda x: x["time"] > datetime.datetime.fromtimestamp(file_start + nterval / 1e3))
+    #             cur_rdd.map(lambda rdd: process(rdd))
+    #             # if clear, file_data = []
+    #             file_data = remain_rdd.collect()
+    #             file_start = file_data[0]["time"]
+    #             file_end = file_data[len(file_data)-1]["time"]
+    #             # add window time or offset to be the difference between file_start time and window time e.g window = 5s, start = 6s, offset = 1s
+    #             buffer_list = [file_start, file_end, file_data]
+    #     # buffer has data remaining
+    #     else:
+    #         if file_start - buffer_list[0] > interval:
+    #             # send
+    #             new_res = sc.parallelize(buffer_list[2])
+    #             new_res.map(lambda rdd: process(rdd))
+    #             buffer_list[2] = []
+    #             # prev end time is the new window start time
+    #             file_start = buffer_list[1]
+    #
+    #         else:
+    #             # buffer data time sum
+    #             offset = buffer_list[1] - buffer_list[0]
+    #             # all in unix time
+    #             # file too long or just fit
+    #             if file_end - file_start + offset >= interval:
+    #                 cur_data = sc.parallelize(file_data)
+    #                 cur_rdd = cur_data.filter(lambda x: x["time"] <= datetime.datetime.fromtimestamp(interval / 1e3))
+    #                 pre_rdd = sc.parallelize(buffer_list[2])
+    #                 new_rdd = pre_rdd.union(cur_rdd)
+    #                 new_rdd.map(lambda rdd: process(rdd))
+    #                 buffer_list[2] = []
+    #                 remain_rdd = cur_data.filter(lambda x: x["time"] > datetime.datetime.fromtimestamp(interval / 1e3))
+    #                 # update new file_data
+    #                 file_data = remain_rdd.collect()
+    #                 # note: should change this to prev end
+    #                 file_start = file_data[0]["time"]
+    #
+    #             # file too short
+    #             else:
+    #                 buffer_list[2] += file_data
+    #                 buffer_list[1] = file_end
+    #                 file_data = []
 
 def read_udf(data_path: str, file_name: str):
     with open(data_path+file_name) as json_data:
@@ -594,21 +631,23 @@ if (archive_path[-1] != '/'):
     archive_path += '/'
 
 group_id = sys.argv[4]
-consumer_group_id = "md2k-test" + str(group_id)
+consumer_group_id = "md2k-test" #+ str(group_id)
 
 file_name = sys.argv[3]
 
 virtual_sensor = read_udf(archive_path, file_name)
 sensor_id = virtual_sensor[0]
 interval = virtual_sensor[2]
+print ("Query is:", interval, sensor_id, virtual_sensor)
 
 kafka_files_stream = spark_kafka_consumer(["filequeue"], ssc, broker, consumer_group_id)
 kafka_files_stream.foreachRDD(lambda rdd: process_valid_file(rdd, data_path, sensor_id, interval)) # store or create DF() process -> type 0
+#kafka_files_stream.foreachRDD(lambda rdd: kafka_file_to_json_producer(rdd, data_path))
 
 # window & process
 # name = kafka_files_stream.map(lambda rdd: ) # get file name and then use structured streaming type 1
 # spark = getSparkSessionInstance()
 # record = spark.readStream.csv("/Users/Shengfei/Desktop/cerebralcortex/data/"+name) # todo: add schema
 
-# ssc.start()
-# ssc.awaitTermination()
+ssc.start()
+ssc.awaitTermination()
