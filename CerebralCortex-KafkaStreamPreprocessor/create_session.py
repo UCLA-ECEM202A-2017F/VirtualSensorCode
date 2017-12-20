@@ -88,7 +88,6 @@ def store_streams(data):
 #     storeOffsetRanges(message)
 #
 #     print("Ready to process stream...")
-
 ##################################
 
 #util module files
@@ -158,7 +157,7 @@ def row_to_datapoint(row: str) -> dict:
                     values = values
 
     timezone = datetime.timezone(datetime.timedelta(milliseconds=offset))
-    #ts = datetime.datetime.fromtimestamp(ts, timezone)
+    ts = datetime.datetime.fromtimestamp(ts, timezone)
     return DataPoint(start_time=ts, sample=values)
     #return {'starttime': str(ts), 'value': values}
 
@@ -222,6 +221,7 @@ from cerebralcortex.kernel.utils.logging import cc_log
 #from core import CC
 #from core.kafka_offset import storeOffsetRanges
 from pyspark.streaming.kafka import KafkaDStream
+from pyspark.sql import Row, SparkSession
 #from util.util import row_to_datapoint, chunks, get_gzip_file_contents, rename_file
 
 
@@ -402,7 +402,8 @@ def verify_sid(msg: dict, sid: str, data_path: str) -> bool:
 
 def row_to_datapoint_cus(row: str):
     ts, offset, values = row.split(', ', 2)
-    ts = int(ts) / 1000.0
+    # ts = int(ts) / 1000.0
+    ts = int(ts)
     offset = int(offset)
 
     # if isinstance(values, tuple):
@@ -419,8 +420,8 @@ def row_to_datapoint_cus(row: str):
     #             except:
     #                 values = values
 
-    timezone = "UTC"#datetime.timezone(datetime.timedelta(milliseconds=offset))
-    #ts = datetime.datetime.fromtimestamp(ts, timezone)
+    # timezone = datetime.timezone(datetime.timedelta(milliseconds=offset))
+    ts = datetime.fromtimestamp(ts)
     # return DataPoint(start_time=ts, sample=values)
     return {'time':str(ts), 'value':list(eval(values))}
 
@@ -433,7 +434,6 @@ def extract_info(msg: list, data_path: str):
         #data_descriptor = metadata_header["data_descriptor"]
         #execution_context = metadata_header["execution_context"]
         gzip_file_content = get_gzip_file_contents(data_path + msg["filename"])
-        # gzip_file_content = get_gzip_file_contents(data_path + "6ff7c2ff-deaf-4c2f-aff5-63228ee13540.gz")
 
         datapoints = list(map(lambda x: row_to_datapoint_cus(x), gzip_file_content.splitlines()))
         #print(datapoints)
@@ -453,38 +453,38 @@ def extract_info(msg: list, data_path: str):
 
 #######################
 def process(data: list):
-    print("in process")
-
     # print("========= %s =========" % str(time))
     try:
-        print("In process")
+        print("====== In process ======")
         # Get the singleton instance of SparkSession
         spark = getSparkSessionInstance()
-        test = data.collect()
-        rdd = spark.sparkContext.parallelize(test[0])
-
-        print(rdd.collect())
-
-        df = rdd.toDF()
-        df.select(mean(df["value"][0]), mean(df["value"][1])).show()
+        data = data.collect()
+        rdd = spark.sparkContext.parallelize(data[0])
+        rowRDD = rdd.map(lambda w: Row(time=w["time"], value=w["value"]))
+        df = spark.createDataFrame(rowRDD)
         df.show()
+
+        # ====== deprecated ===== #
+        # test = data.collect()
+        # rdd = spark.sparkContext.parallelize(test[0])
+        # df = rdd.toDF()
+
         ##### Example process
+        df.select(mean(df["value"][0]), mean(df["value"][1]), mean(df["value"][2])).show()
+        df.select(max(df["value"][0]), max(df["value"][1]), max(df["value"][2])).show()
+
         # myRdd = data.flatMap(lambda line: line.split(" ")).map(lambda word: (word, 1)).reduceByKey(lambda a, b: a+b)
         # rowRdd = myRdd.map(lambda w: Row(word=w[0], Count=w[1]))
         # df = spark.createDataFrame(rowRdd)
-        # df.show()
         #### End of example
-        #
         # # Convert RDD[String] to RDD[Row] to DataFrame
         # rowRdd = rdd.map(lambda w: Row(word=w))
         # wordsDataFrame = spark.createDataFrame(rowRdd)
-        #
         # # Creates a temporary view using the DataFrame
         # wordsDataFrame.createOrReplaceTempView("words")
-        #
         # # Do word count on table using SQL and print it
         # wordCountsDataFrame = spark.sql("select word, count(*) as total from words group by word")
-        # wordCountsDataFrame.show()
+
     except Exception as e:
         print(e)
 
@@ -525,13 +525,8 @@ def process_valid_file(message: KafkaDStream, data_path: str, sensor_id: str, in
     print(results.collect())
     print("File Iteration results:", results.count())
 
-    process(results)
-
-    #results.map(lambda rdd: process(rdd))
-    #print(results.collect())
-    #results.foreach(lambda rdd: print(rdd))
-
-    # print ("Great")
+    # process(results) # serialized
+    results.map(lambda rdd: process(rdd))
 
     # ... check buffer
     # assume sorted
@@ -642,7 +637,6 @@ print ("Query is:", interval, sensor_id, virtual_sensor)
 
 kafka_files_stream = spark_kafka_consumer(["filequeue"], ssc, broker, consumer_group_id)
 kafka_files_stream.foreachRDD(lambda rdd: process_valid_file(rdd, data_path, sensor_id, interval)) # store or create DF() process -> type 0
-#kafka_files_stream.foreachRDD(lambda rdd: kafka_file_to_json_producer(rdd, data_path))
 
 # window & process
 # name = kafka_files_stream.map(lambda rdd: ) # get file name and then use structured streaming type 1
