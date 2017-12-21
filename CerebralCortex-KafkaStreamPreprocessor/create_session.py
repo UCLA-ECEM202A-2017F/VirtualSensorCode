@@ -29,7 +29,6 @@ from pyspark import SparkContext, SparkConf
 #from core.kafka_consumer import spark_kafka_consumer
 #from core.kafka_to_cc_storage_engine import kafka_to_db
 from pyspark.streaming import StreamingContext
-#from core.kafka_producer import kafka_file_to_json_producer
 from pyspark.sql import SparkSession, SQLContext
 from pyspark.sql.functions import *
 from pyspark.sql.types import *
@@ -41,6 +40,7 @@ import os
 from cerebralcortex.kernel.datatypes.datastream import DataStream
 from datetime import datetime
 from cerebralcortex.kernel.utils.logging import cc_log
+from threading import Thread
 
 ###################################
 from cerebralcortex.CerebralCortex import CerebralCortex
@@ -50,14 +50,10 @@ configuration_file = os.path.join(os.path.dirname(__file__), 'cerebralcortex_api
 CC = CerebralCortex(configuration_file, time_zone="America/Los_Angeles", load_spark=False)
 
 ###################################
-
-import json
-
 #from core import CC
 from pyspark.streaming.kafka import KafkaDStream
 #from core.kafka_offset import storeOffsetRanges
 from cerebralcortex.kernel.utils.logging import cc_log
-import datetime
 
 def verify_fields(msg):
     if "metadata" in msg and "data" in msg:
@@ -91,9 +87,7 @@ def store_streams(data):
 ##################################
 
 #util module files
-import datetime
 import gzip
-import json
 from pympler import asizeof
 from cerebralcortex.kernel.datatypes.datastream import DataStream, DataPoint
 from dateutil.parser import parse
@@ -213,7 +207,6 @@ def json_to_datastream(json_obj, stream_type):
                       datapoints)
 
 #################################
-import json
 import os
 from cerebralcortex.kernel.datatypes.datastream import DataStream
 from datetime import datetime
@@ -320,10 +313,6 @@ def kafka_file_to_json_producer(message: KafkaDStream, data_path):
     print("File Iteration count:", results.count())
 
 #################################
-
-#from core import CC
-from cerebralcortex.kernel.utils.logging import cc_log
-
 def storeOffsetRanges(rdd):
     offsetRanges = rdd.offsetRanges()
     for offsets in offsetRanges:
@@ -368,13 +357,9 @@ def spark_kafka_consumer(kafka_topic: str, ssc, broker, consumer_group_id) -> Ka
         print(e)
 
 ##################################
-# from core import CC
-# from core.kafka_consumer import spark_kafka_consumer
-# from core.kafka_to_cc_storage_engine import kafka_to_db
-# from pyspark.streaming import StreamingContext
-# from core.kafka_producer_cus import process_valid_file
+##        Virtual Sensor        ##
 ##################################
-## User Defined Query Start ##
+##   User Defined Query Start   ##
 
 # Lazily instantiated global instance of SparkSession
 def getSparkSessionInstance():
@@ -525,8 +510,8 @@ def process_valid_file(message: KafkaDStream, data_path: str, sensor_id: str, in
     print(results.collect())
     print("File Iteration results:", results.count())
 
-    # process(results) # serialized
-    results.map(lambda rdd: process(rdd))
+    process(results) # serialized
+    # results.map(lambda rdd: process(rdd))
 
     # ... check buffer
     # assume sorted
@@ -605,6 +590,30 @@ def read_udf(data_path: str, file_name: str):
         process = dt['process'] # module.process
     return [sid, osid, time_interval, endt, process]
 
+
+def mystrip(col):
+    return col.strip('( )')
+
+
+def compute_window_check(interval: int, datapath: str): # sensor fields number generalize
+    while(True):
+        print ("=== Processing upon user's request ===")
+        filename = "28d64dad-2328-461c-8267-0e64ea6810fc.gz" # hard coded, use a buffer of file list in the future
+        spark = getSparkSessionInstance()
+        schema = StructType([StructField("Timestamp", LongType()), \
+                            StructField("Offset", StringType()), \
+                            StructField("X", StringType()), \
+                            StructField("Y", StringType()), \
+                            StructField("Z", StringType())])
+        strip_field = udf(mystrip, StringType())
+        df = spark.read.format("csv").schema(schema).option("header","False").load(datapath+filename)
+        # path = "2e2578ed-e064-407e-b64b-085033700ec5.gz,28d64dad-2328-461c-8267-0e64ea6810fc.gz"
+        # df = spark.read.format("csv").option("header","False").load(path.split(','))
+        # df = sc.textFile("2e2578ed-e064-407e-b64b-085033700ec5.gz").map(lambda x: x.replace('(', '').replace(')','').split(', ')).toDF()
+
+        df.show()
+        time.sleep(interval)
+
 # =============================================================================
 # Kafka Consumer Configs
 batch_duration = 5  # seconds
@@ -635,6 +644,9 @@ sensor_id = virtual_sensor[0]
 interval = virtual_sensor[2]
 print ("Query is:", interval, sensor_id, virtual_sensor)
 
+compute = Thread(target=compute_window_check, args=(int(interval), data_path))
+compute.start()
+
 kafka_files_stream = spark_kafka_consumer(["filequeue"], ssc, broker, consumer_group_id)
 kafka_files_stream.foreachRDD(lambda rdd: process_valid_file(rdd, data_path, sensor_id, interval)) # store or create DF() process -> type 0
 
@@ -645,3 +657,4 @@ kafka_files_stream.foreachRDD(lambda rdd: process_valid_file(rdd, data_path, sen
 
 ssc.start()
 ssc.awaitTermination()
+compute.join()
