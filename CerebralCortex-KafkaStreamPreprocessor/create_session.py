@@ -41,6 +41,7 @@ from cerebralcortex.kernel.datatypes.datastream import DataStream
 from datetime import datetime
 from cerebralcortex.kernel.utils.logging import cc_log
 from threading import Thread
+from importlib import import_module
 
 ###################################
 from cerebralcortex.CerebralCortex import CerebralCortex
@@ -445,18 +446,22 @@ def process(data: list):
         spark = getSparkSessionInstance()
         data = data.collect()
         rdd = spark.sparkContext.parallelize(data[0])
-        rowRDD = rdd.map(lambda w: Row(time=w["time"], value=w["value"]))
-        df = spark.createDataFrame(rowRDD)
-        df.show()
+        # test dynamic import
+        method(rdd)
 
-        # ====== deprecated ===== #
-        # test = data.collect()
-        # rdd = spark.sparkContext.parallelize(test[0])
-        # df = rdd.toDF()
-
-        ##### Example process
-        df.select(mean(df["value"][0]), mean(df["value"][1]), mean(df["value"][2])).show()
-        df.select(max(df["value"][0]), max(df["value"][1]), max(df["value"][2])).show()
+        # # ====== original ===== #
+        # rowRDD = rdd.map(lambda w: Row(time=w["time"], value=w["value"]))
+        # df = spark.createDataFrame(rowRDD)
+        # df.show()
+        #
+        # # ====== deprecated ===== #
+        # # test = data.collect()
+        # # rdd = spark.sparkContext.parallelize(test[0])
+        # # df = rdd.toDF()
+        #
+        # ##### Example process
+        # df.select(mean(df["value"][0]), mean(df["value"][1]), mean(df["value"][2])).show()
+        # df.select(max(df["value"][0]), max(df["value"][1]), max(df["value"][2])).show()
 
         # myRdd = data.flatMap(lambda line: line.split(" ")).map(lambda word: (word, 1)).reduceByKey(lambda a, b: a+b)
         # rowRdd = myRdd.map(lambda w: Row(word=w[0], Count=w[1]))
@@ -642,6 +647,14 @@ file_name = sys.argv[3]
 virtual_sensor = read_udf(archive_path, file_name)
 sensor_id = virtual_sensor[0]
 interval = virtual_sensor[2]
+udf_function = virtual_sensor[4]
+
+# load user defined process
+module_cus = import_module(udf_function)
+# reload(module_cus)
+method = getattr(module_cus, "process")
+# method(testrdd)
+
 print ("Query is:", interval, sensor_id, virtual_sensor)
 
 compute = Thread(target=compute_window_check, args=(int(interval), data_path))
@@ -658,3 +671,6 @@ kafka_files_stream.foreachRDD(lambda rdd: process_valid_file(rdd, data_path, sen
 ssc.start()
 ssc.awaitTermination()
 compute.join()
+
+# /*// data records how many
+# // simple function*/
