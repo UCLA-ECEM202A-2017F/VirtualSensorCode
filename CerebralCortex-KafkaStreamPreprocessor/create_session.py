@@ -1,27 +1,3 @@
-# Copyright (c) 2017, MD2K Center of Excellence
-# All rights reserved.
-#
-# Redistribution and use in source and binary forms, with or without
-# modification, are permitted provided that the following conditions are met:
-#
-# * Redistributions of source code must retain the above copyright notice, this
-# list of conditions and the following disclaimer.
-#
-# * Redistributions in binary form must reproduce the above copyright notice,
-# this list of conditions and the following disclaimer in the documentation
-# and/or other materials provided with the distribution.
-#
-# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-# DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
-# FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
-# DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-# SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
-# CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
-# OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-# OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
 import time
 import sys
 from pyspark import SparkContext, SparkConf
@@ -49,6 +25,10 @@ from cerebralcortex.CerebralCortex import CerebralCortex
 #Sandeep: Give path to .yml file of APIServer
 configuration_file = os.path.join(os.path.dirname(__file__), 'cerebralcortex_apiserver.yml')
 CC = CerebralCortex(configuration_file, time_zone="America/Los_Angeles", load_spark=False)
+
+################################## Global variables
+filelist = []
+cur_time = 1513236915 #hard coded, should use datetime.now() in the future
 
 ###################################
 #from core import CC
@@ -334,7 +314,7 @@ def spark_kafka_consumer(kafka_topic: str, ssc, broker, consumer_group_id) -> Ka
     """
     try:
         offsets = CC.get_kafka_offsets(kafka_topic[0])
-
+        # offsets = False  # when out of range, reset
         if bool(offsets):
             fromOffset = {}
             for offset in offsets:
@@ -413,8 +393,14 @@ def row_to_datapoint_cus(row: str):
 
 
 def extract_info(msg: list, data_path: str):
+    global cur_time
+    global interval
+
+    inte = int(interval)
+    print ("in extract info here")
     try:
         metadata_header = msg["metadata"]
+        filename = msg["filename"]
         #owner = "fbf8d50c-7f1d-47aa-b958-9caeadc676bd"#metadata_header["owner"]
         #name = metadata_header["name"]
         #data_descriptor = metadata_header["data_descriptor"]
@@ -425,8 +411,22 @@ def extract_info(msg: list, data_path: str):
         #print(datapoints)
         start_time = datapoints[0]["time"]
         end_time = datapoints[len(datapoints) - 1]["time"]
+
+        # in the window, add into queue
+        end_time = datetime.strptime(end_time, "%Y-%m-%d %H:%M:%S")
+        end_time = datetime.timestamp(end_time)
+
+        if end_time >= cur_time:
+            return filename
+            # filelist.append(filename)
+
+        # if len(filelist) != 0:
+        #     return [len(filelist)]
+
         #return [identifier, owner, name, data_descriptor, start_time, end_time, datapoints] #list of dictionary
         #return [0, owner, "name", "data_descriptor", start_time, end_time, datapoints]
+
+        # return valid file name instead
         return datapoints
 
     except Exception as e:
@@ -515,75 +515,14 @@ def process_valid_file(message: KafkaDStream, data_path: str, sensor_id: str, in
     print(results.collect())
     print("File Iteration results:", results.count())
 
-    process(results) # serialized
-    # results.map(lambda rdd: process(rdd))
+    ################### test
+    global filelist
+    for f in results.collect():
+        filelist.append(data_path+f)
+    print ("File Length:", len(filelist))
+    ###################
+    # process(results) # serialized
 
-    # ... check buffer
-    # assume sorted
-    # results_list = results.collect()[6]
-
-    # interval should be passed in
-    # buffer is like a user defined window
-    # # buffer format is [start, end, [dict of datapoints]]
-    # # Type 1
-    # results_list = results.collect()
-    # file_data = results_list[6]
-    # file_start = results_list[4]
-    # file_end = results_list[5]
-    #
-    # # while file has not been fully processed
-    # while file_data != []:
-    #     # based on data time
-    #     # first time or just sent clearly:
-    #     if buffer_list[2] == []:
-    #         if file_end - file_start < interval:
-    #             buffer_list = [file_start, file_end, file_data]
-    #             file_data = []
-    #
-    #         else:
-    #             cur_data = sc.parallelize(file_data)
-    #             cur_rdd = cur_data.filter(lambda x: x["time"] <= datetime.datetime.fromtimestamp(file_start + interval / 1e3))
-    #             remain_rdd = cur_data.filter(lambda x: x["time"] > datetime.datetime.fromtimestamp(file_start + nterval / 1e3))
-    #             cur_rdd.map(lambda rdd: process(rdd))
-    #             # if clear, file_data = []
-    #             file_data = remain_rdd.collect()
-    #             file_start = file_data[0]["time"]
-    #             file_end = file_data[len(file_data)-1]["time"]
-    #             # add window time or offset to be the difference between file_start time and window time e.g window = 5s, start = 6s, offset = 1s
-    #             buffer_list = [file_start, file_end, file_data]
-    #     # buffer has data remaining
-    #     else:
-    #         if file_start - buffer_list[0] > interval:
-    #             # send
-    #             new_res = sc.parallelize(buffer_list[2])
-    #             new_res.map(lambda rdd: process(rdd))
-    #             buffer_list[2] = []
-    #             # prev end time is the new window start time
-    #             file_start = buffer_list[1]
-    #
-    #         else:
-    #             # buffer data time sum
-    #             offset = buffer_list[1] - buffer_list[0]
-    #             # all in unix time
-    #             # file too long or just fit
-    #             if file_end - file_start + offset >= interval:
-    #                 cur_data = sc.parallelize(file_data)
-    #                 cur_rdd = cur_data.filter(lambda x: x["time"] <= datetime.datetime.fromtimestamp(interval / 1e3))
-    #                 pre_rdd = sc.parallelize(buffer_list[2])
-    #                 new_rdd = pre_rdd.union(cur_rdd)
-    #                 new_rdd.map(lambda rdd: process(rdd))
-    #                 buffer_list[2] = []
-    #                 remain_rdd = cur_data.filter(lambda x: x["time"] > datetime.datetime.fromtimestamp(interval / 1e3))
-    #                 # update new file_data
-    #                 file_data = remain_rdd.collect()
-    #                 # note: should change this to prev end
-    #                 file_start = file_data[0]["time"]
-    #
-    #             # file too short
-    #             else:
-    #                 buffer_list[2] += file_data
-    #                 buffer_list[1] = file_end
-    #                 file_data = []
 
 def read_udf(data_path: str, file_name: str):
     with open(data_path+file_name) as json_data:
@@ -596,28 +535,45 @@ def read_udf(data_path: str, file_name: str):
     return [sid, osid, time_interval, endt, process]
 
 
-def mystrip(col):
-    return col.strip('( )')
-
-
+###### preparing RDD/df for process ######
 def compute_window_check(interval: int, datapath: str): # sensor fields number generalize
+    global cur_time
+    global filelist
+    time.sleep(interval)
     while(True):
         print ("=== Processing upon user's request ===")
-        filename = "28d64dad-2328-461c-8267-0e64ea6810fc.gz" # hard coded, use a buffer of file list in the future
+
+        for f in filelist:
+            print ("file:", f)
+
+        path = ','.join(filelist)
         spark = getSparkSessionInstance()
+        sc = spark.sparkContext
+        # sc.textFile(path).map(lambda x: x.replace('(', '').replace(')','').split(', ')).toDF().show(5)
+        df = sc.textFile(path).map(lambda x: [list(eval(a)) if isinstance(eval(a),tuple) else eval(a) for a in x.split(', ',2)]).toDF(["TimeStamp","Offset","Value"])
+        print ("window starting from: ", datetime.fromtimestamp(cur_time))
+        df.show()
+        dfrdd = df.rdd.map(list)
+        method(dfrdd)
+        
+        ###### test #####
+        filename = "28d64dad-2328-461c-8267-0e64ea6810fc.gz" # hard coded, use a buffer of file list in the future
         schema = StructType([StructField("Timestamp", LongType()), \
                             StructField("Offset", StringType()), \
                             StructField("X", StringType()), \
                             StructField("Y", StringType()), \
                             StructField("Z", StringType())])
-        strip_field = udf(mystrip, StringType())
         df = spark.read.format("csv").schema(schema).option("header","False").load(datapath+filename)
+        df.show()
+        ###### end #####
+
         # path = "2e2578ed-e064-407e-b64b-085033700ec5.gz,28d64dad-2328-461c-8267-0e64ea6810fc.gz"
         # df = spark.read.format("csv").option("header","False").load(path.split(','))
         # df = sc.textFile("2e2578ed-e064-407e-b64b-085033700ec5.gz").map(lambda x: x.replace('(', '').replace(')','').split(', ')).toDF()
-
-        df.show()
+        # print ("window starting from: ", datetime.fromtimestamp(cur_time))
+        filelist = []
         time.sleep(interval)
+        cur_time += interval
 
 # =============================================================================
 # Kafka Consumer Configs
