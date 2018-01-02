@@ -14,4 +14,6 @@ export PATH=$SPARK_HOME/bin:$PATH
 
 export SPARK_MASTER_OPTS="-Dspark.deploy.defaultCores=1"
 
-spark-submit --conf spark.cores.max=1 --master spark://127.0.0.1:8083 --packages org.apache.spark:spark-streaming-kafka-0-8_2.11:2.2.0,com.datastax.spark:spark-cassandra-connector_2.11:2.0.1 test.py /Users/Shengfei/Desktop/cerebralcortex/data/ user_query.json /Users/Shengfei/Desktop/cerebralcortex/Archive/ 2
+spark-submit --master spark://127.0.0.1:8080 --packages org.apache.spark:spark-streaming-kafka-0-8_2.11:2.2.0,com.datastax.spark:spark-cassandra-connector_2.11:2.0.1 create_session.py /Users/Shengfei/Desktop/cerebralcortex/data/ /Users/Shengfei/Desktop/cerebralcortex/Archive/ user_query.json 2
+
+#spark-submit --conf spark.cores.max=1 --master spark://127.0.0.1:8083 --packages org.apache.spark:spark-streaming-kafka-0-8_2.11:2.2.0,com.datastax.spark:spark-cassandra-connector_2.11:2.0.1 main.py /Users/Shengfei/Desktop/cerebralcortex/data/

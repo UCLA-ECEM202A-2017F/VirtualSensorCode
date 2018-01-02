@@ -25,3 +25,6 @@ export SPARK_IDENT_STRING=master2
 /Users/Shengfei/Desktop/Spark-Archive/spark-2.2.0-bin-hadoop2.7/sbin//start-slave.sh spark://127.0.0.1:8083
 
 spark-submit --conf spark.cores.max=1 --master spark://127.0.0.1:8081 --packages org.apache.spark:spark-streaming-kafka-0-8_2.11:2.2.0,com.datastax.spark:spark-cassandra-connector_2.11:2.0.1 test.py "/Users/Shengfei/Desktop/cerebralcortex/data/"
+
+#/Users/Shengfei/Desktop/Spark-Archive/spark-2.2.0-bin-hadoop2.7/sbin/start-master.sh -h 127.0.0.1 -p 8080
+#/Users/Shengfei/Desktop/Spark-Archive/spark-2.2.0-bin-hadoop2.7/sbin//start-slave.sh spark://127.0.0.1:8080

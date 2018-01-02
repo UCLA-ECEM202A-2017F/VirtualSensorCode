@@ -28,10 +28,10 @@ CC = CerebralCortex(configuration_file, time_zone="America/Los_Angeles", load_sp
 
 ################################## Global variables
 filelist = []
-cur_time = 1513236915 #hard coded, should use datetime.now() in the future
+cur_time = 1513236910 #hard coded, should use datetime.now() in the future
+# let user define start time
 
 ###################################
-#from core import CC
 from pyspark.streaming.kafka import KafkaDStream
 #from core.kafka_offset import storeOffsetRanges
 from cerebralcortex.kernel.utils.logging import cc_log
@@ -188,13 +188,11 @@ def json_to_datastream(json_obj, stream_type):
                       datapoints)
 
 #################################
-import os
 from cerebralcortex.kernel.datatypes.datastream import DataStream
 from datetime import datetime
 from cerebralcortex.kernel.utils.logging import cc_log
-#from core import CC
 #from core.kafka_offset import storeOffsetRanges
-from pyspark.streaming.kafka import KafkaDStream
+from pyspark.streaming.kafka import KafkaUtils, KafkaDStream, OffsetRange, TopicAndPartition
 from pyspark.sql import Row, SparkSession
 #from util.util import row_to_datapoint, chunks, get_gzip_file_contents, rename_file
 
@@ -303,9 +301,6 @@ def storeOffsetRanges(rdd):
             cc_log()
 
 ################################
-from pyspark.streaming.kafka import KafkaUtils, KafkaDStream, OffsetRange, TopicAndPartition
-#from core import CC
-
 def spark_kafka_consumer(kafka_topic: str, ssc, broker, consumer_group_id) -> KafkaDStream:
     """
     supports only one topic at a time
@@ -392,12 +387,10 @@ def row_to_datapoint_cus(row: str):
     return {'time':str(ts), 'value':list(eval(values))}
 
 
-def extract_info(msg: list, data_path: str):
+def extract_info(msg: dict, data_path: str):
     global cur_time
     global interval
 
-    inte = int(interval)
-    print ("in extract info here")
     try:
         metadata_header = msg["metadata"]
         filename = msg["filename"]
@@ -420,6 +413,7 @@ def extract_info(msg: list, data_path: str):
             return filename
             # filelist.append(filename)
 
+        return None
         # if len(filelist) != 0:
         #     return [len(filelist)]
 
@@ -427,7 +421,8 @@ def extract_info(msg: list, data_path: str):
         #return [0, owner, "name", "data_descriptor", start_time, end_time, datapoints]
 
         # return valid file name instead
-        return datapoints
+        # return datapoints
+
 
     except Exception as e:
         #error_log = "In Kafka preprocessor - Error in processing file: " + str(msg["filename"])+" Owner-ID: "+owner + "Stream Name: "+name + " - " + str(e)
@@ -463,18 +458,6 @@ def process(data: list):
         # df.select(mean(df["value"][0]), mean(df["value"][1]), mean(df["value"][2])).show()
         # df.select(max(df["value"][0]), max(df["value"][1]), max(df["value"][2])).show()
 
-        # myRdd = data.flatMap(lambda line: line.split(" ")).map(lambda word: (word, 1)).reduceByKey(lambda a, b: a+b)
-        # rowRdd = myRdd.map(lambda w: Row(word=w[0], Count=w[1]))
-        # df = spark.createDataFrame(rowRdd)
-        #### End of example
-        # # Convert RDD[String] to RDD[Row] to DataFrame
-        # rowRdd = rdd.map(lambda w: Row(word=w))
-        # wordsDataFrame = spark.createDataFrame(rowRdd)
-        # # Creates a temporary view using the DataFrame
-        # wordsDataFrame.createOrReplaceTempView("words")
-        # # Do word count on table using SQL and print it
-        # wordCountsDataFrame = spark.sql("select word, count(*) as total from words group by word")
-
     except Exception as e:
         print(e)
 
@@ -491,6 +474,7 @@ def process(data: list):
 #     module = __import__(path_parts[0], fromlist=path_parts[1])
 #     return getattr(module, path_parts[1])
 
+
 def process_valid_file(message: KafkaDStream, data_path: str, sensor_id: str, interval: int):
     """
     Read convert gzip file data into json object and publish it on Kafka
@@ -500,25 +484,27 @@ def process_valid_file(message: KafkaDStream, data_path: str, sensor_id: str, in
     print("====== Processing in process_valid_file ======")
     records = message.map(lambda r: json.loads(r[1])) # matadata & filename
     # print(records.collect())
-
     valid_records = records.filter(lambda rdd: verify_fields(rdd, data_path))
     print("File Iteration count-valid_records:", valid_records.count())
 
     print("====== Processing in verify_sid ======")
     valid_sensors = valid_records.filter(lambda rdd: verify_sid(rdd, sensor_id, data_path))
     print("File Iteration count-valid_sensors:", valid_sensors.count())
-    print(valid_sensors.collect())
+    # print(valid_sensors.collect())
 
     print("====== Processing in extract_info ======")
-    results = valid_sensors.map(lambda rdd: extract_info(rdd, data_path)) # rdd of list [identifier, owner, name, data_descriptor, start_time, end_time, datapoints]
+    results = valid_sensors.map(lambda rdd: extract_info(rdd, data_path))
+    # used to be rdd of list [identifier, owner, name, data_descriptor, start_time, end_time, datapoints]
+    # now just the file within window
     print("Result is: ")
     print(results.collect())
     print("File Iteration results:", results.count())
 
-    ################### test
+    ################### update buffer
     global filelist
     for f in results.collect():
-        filelist.append(data_path+f)
+        if f is not None:
+            filelist.append(data_path+f)
     print ("File Length:", len(filelist))
     ###################
     # process(results) # serialized
@@ -546,45 +532,51 @@ def compute_window_check(interval: int, datapath: str): # sensor fields number g
         for f in filelist:
             print ("file:", f)
 
-        path = ','.join(filelist)
-        spark = getSparkSessionInstance()
-        sc = spark.sparkContext
-        # sc.textFile(path).map(lambda x: x.replace('(', '').replace(')','').split(', ')).toDF().show(5)
-        df = sc.textFile(path).map(lambda x: [list(eval(a)) if isinstance(eval(a),tuple) else eval(a) for a in x.split(', ',2)]).toDF(["TimeStamp","Offset","Value"])
-        print ("window starting from: ", datetime.fromtimestamp(cur_time))
-        df.show()
-        dfrdd = df.rdd.map(list)
-        method(dfrdd)
-        
-        ###### test #####
-        filename = "28d64dad-2328-461c-8267-0e64ea6810fc.gz" # hard coded, use a buffer of file list in the future
-        schema = StructType([StructField("Timestamp", LongType()), \
-                            StructField("Offset", StringType()), \
-                            StructField("X", StringType()), \
-                            StructField("Y", StringType()), \
-                            StructField("Z", StringType())])
-        df = spark.read.format("csv").schema(schema).option("header","False").load(datapath+filename)
-        df.show()
+        print ("window starting from:", datetime.fromtimestamp(cur_time), "with file length:", len(filelist))
+        # filelist in not null (has file with that window)
+        if len(filelist) != 0:
+            path = ','.join(filelist)
+            filelist = []
+            spark = getSparkSessionInstance()
+            sc = spark.sparkContext
+            # sc.textFile(path).map(lambda x: x.replace('(', '').replace(')','').split(', ')).toDF().show(5)
+            df = sc.textFile(path).map(lambda x: [list(eval(a)) if isinstance(eval(a),tuple) else eval(a) for a in x.split(', ',2)]).toDF(["TimeStamp","Offset","Value"])
+            df = df.filter(df.TimeStamp>=cur_time)
+            df.show()
+            dfrdd = df.rdd.map(list)
+            method(dfrdd)
+
+            ###### test #####
+            # filename = "28d64dad-2328-461c-8267-0e64ea6810fc.gz" # hard coded, use a buffer of file list in the future
+            # schema = StructType([StructField("Timestamp", LongType()), \
+            #                     StructField("Offset", StringType()), \
+            #                     StructField("X", StringType()), \
+            #                     StructField("Y", StringType()), \
+            #                     StructField("Z", StringType())])
+            # df = spark.read.format("csv").schema(schema).option("header","False").load(datapath+filename)
+            # df.show()
+
+        else:
+            print ("Sorry. No data available")
         ###### end #####
 
         # path = "2e2578ed-e064-407e-b64b-085033700ec5.gz,28d64dad-2328-461c-8267-0e64ea6810fc.gz"
         # df = spark.read.format("csv").option("header","False").load(path.split(','))
         # df = sc.textFile("2e2578ed-e064-407e-b64b-085033700ec5.gz").map(lambda x: x.replace('(', '').replace(')','').split(', ')).toDF()
         # print ("window starting from: ", datetime.fromtimestamp(cur_time))
-        filelist = []
-        time.sleep(interval)
         cur_time += interval
+        time.sleep(interval)
 
 # =============================================================================
 # Kafka Consumer Configs
 batch_duration = 5  # seconds
+# spark = SparkSession.builder.appName("xxx").getOrCreate()
 # sc = SparkContext("spark://127.0.0.1:8083", "Cerebral-Cortex")
-sc = SparkContext(appName="Cerebral-Cortex")
 # master_port = sys.argv[5]
 # sc = SparkContext(master_port, "Cerebral-Cortex")
+sc = SparkContext(appName="Cerebral-Cortex")
 sc.setLogLevel("WARN")
 ssc = StreamingContext(sc, batch_duration)
-# spark = SparkSession.builder.appName("xxx").getOrCreate()
 broker = "localhost:9092"  # multiple brokers can be passed as comma separated values
 
 data_path = sys.argv[1]
@@ -596,24 +588,24 @@ if (archive_path[-1] != '/'):
     archive_path += '/'
 
 group_id = sys.argv[4]
-consumer_group_id = "md2k-test" #+ str(group_id)
+consumer_group_id = "md2k-test"+str(group_id)
 
 file_name = sys.argv[3]
-
 virtual_sensor = read_udf(archive_path, file_name)
 sensor_id = virtual_sensor[0]
-interval = virtual_sensor[2]
+interval = int(virtual_sensor[2])
 udf_function = virtual_sensor[4]
 
-# load user defined process
+# Load user defined process
 module_cus = import_module(udf_function)
 # reload(module_cus)
 method = getattr(module_cus, "process")
-# method(testrdd)
+# method is now the function that could be used directly as method(testrdd)
 
-print ("Query is:", interval, sensor_id, virtual_sensor)
+print ("User Query -> Compute Window:"+str(interval)+", From:", sensor_id)
+print ("User Query -> Detailed Info:", virtual_sensor)
 
-compute = Thread(target=compute_window_check, args=(int(interval), data_path))
+compute = Thread(target=compute_window_check, args=(interval, data_path))
 compute.start()
 
 kafka_files_stream = spark_kafka_consumer(["filequeue"], ssc, broker, consumer_group_id)

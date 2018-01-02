@@ -244,6 +244,7 @@ def file_processor(msg: dict, data_path: str) -> DataStream:
     :param data_path:
     :return:
     """
+    print("in file Processor")
     if not isinstance(msg["metadata"],dict):
         metadata_header = json.loads(msg["metadata"])
     else:
@@ -266,6 +267,9 @@ def file_processor(msg: dict, data_path: str) -> DataStream:
     try:
         gzip_file_content = get_gzip_file_contents(data_path + msg["filename"])
         datapoints = list(map(lambda x: row_to_datapoint(x), gzip_file_content.splitlines()))
+
+        print(datapoints)
+
         rename_file(data_path + msg["filename"])
 
         start_time = datapoints[0].start_time
@@ -311,6 +315,8 @@ def kafka_file_to_json_producer(message: KafkaDStream, data_path):
     :param message:
     """
     records = message.map(lambda r: json.loads(r[1]))
+    #print(records.collect())
+
     valid_records = records.filter(lambda rdd: verify_fields(rdd, data_path))
     results = valid_records.map(lambda rdd: file_processor(rdd, data_path)).map(
         store_stream)
@@ -347,7 +353,7 @@ def spark_kafka_consumer(kafka_topic: str, ssc, broker, consumer_group_id) -> Ka
     """
     try:
         offsets = CC.get_kafka_offsets(kafka_topic[0])
-
+        # offsets = False
         if bool(offsets):
             fromOffset = {}
             for offset in offsets:
@@ -377,7 +383,7 @@ def spark_kafka_consumer(kafka_topic: str, ssc, broker, consumer_group_id) -> Ka
 batch_duration = 5  # seconds
 
 #master URL
-sc = SparkContext("spark://127.0.0.1:8083", "Cerebral-Cortex")
+sc = SparkContext("spark://127.0.0.1:8080", "Cerebral-Cortex")
 
 #sc = SparkContext("local[2]", "Cerebral-Cortex")
 
