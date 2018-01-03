@@ -16,8 +16,21 @@ def process(rdd):
     df = spark.createDataFrame(rowRDD)
     # df = rdd.toDF(["time","offset","value"]) # put sensorid into the df (future)
 
-    df.select(mean(df["Value"][0]), mean(df["Value"][1]), mean(df["Value"][2])).show()
-    df.select(max(df["Value"][0]), max(df["Value"][1]), max(df["Value"][2])).show()
+    avgdf = df.select(mean(df["Value"][0]), mean(df["Value"][1]), mean(df["Value"][2]))
+    avgdf.show()
+    avg = avgdf.first().asDict()
+
+    maxdf = df.select(max(df["Value"][0]), max(df["Value"][1]), max(df["Value"][2]))
+    maxdf.show()
+    maxdict = maxdf.first().asDict()
+
+    with open("../user0.txt", 'a') as myfile:
+        for k,v in avg.items():
+            myfile.write(str(k)+": "+str(v)+'\n')
+
+        for k,v in maxdict.items():
+            myfile.write(str(k)+": "+str(v)+'\n')
+
     print ("===== Process Done =====")
 
     # myRdd = data.flatMap(lambda line: line.split(" ")).map(lambda word: (word, 1)).reduceByKey(lambda a, b: a+b)

@@ -1,0 +1,19 @@
+Virtual Sensor Result:
+=== Window starting from: 2017-12-13 23:35:10 with file length: 4 ===
+>> 30 Records Collected
+>> Start time is: 2017-12-13 23:35:16
+>> End time is: 2017-12-13 23:35:45
+avg(Value[0]): 0.568548829231305
+avg(Value[1]): 0.4343017593672077
+avg(Value[2]): 0.42629417950552956
+max(Value[0]): 0.9961114139430299
+max(Value[1]): 0.9792005757656065
+max(Value[2]): 0.9817670556826696
+=== Window starting from: 2017-12-13 23:35:20 with file length: 0 ===
+Sorry. No data available
+=== Window starting from: 2017-12-13 23:35:30 with file length: 0 ===
+Sorry. No data available
+=== Window starting from: 2017-12-13 23:35:40 with file length: 0 ===
+Sorry. No data available
+=== Window starting from: 2017-12-13 23:35:50 with file length: 0 ===
+Sorry. No data available

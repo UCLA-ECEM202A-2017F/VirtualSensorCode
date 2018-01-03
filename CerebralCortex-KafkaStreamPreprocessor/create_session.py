@@ -522,17 +522,28 @@ def read_udf(data_path: str, file_name: str):
 
 
 ###### preparing RDD/df for process ######
-def compute_window_check(interval: int, datapath: str): # sensor fields number generalize
+def compute_window_check(interval: int, datapath: str, filename: str): # sensor fields number generalize
     global cur_time
     global filelist
     time.sleep(interval)
+
+    with open(filename, 'w') as myfile:
+        myfile.write("Virtual Sensor Result:\n") # Future work: add description
+
     while(True):
         print ("=== Processing upon user's request ===")
 
         for f in filelist:
             print ("file:", f)
 
-        print ("window starting from:", datetime.fromtimestamp(cur_time), "with file length:", len(filelist))
+        output = "=== Window starting from: "+str(datetime.fromtimestamp(cur_time))+" with file length: "+str(len(filelist))+" ==="
+
+        with open(filename, 'a') as myfile:
+            myfile.write(output+'\n')
+
+        print (output)
+        # print ("window starting from:", datetime.fromtimestamp(cur_time), "with file length:", len(filelist))
+
         # filelist in not null (has file with that window)
         if len(filelist) != 0:
             path = ','.join(filelist)
@@ -543,6 +554,16 @@ def compute_window_check(interval: int, datapath: str): # sensor fields number g
             df = sc.textFile(path).map(lambda x: [list(eval(a)) if isinstance(eval(a),tuple) else eval(a) for a in x.split(', ',2)]).toDF(["TimeStamp","Offset","Value"])
             df = df.filter(df.TimeStamp>=cur_time)
             df.show()
+
+            num = df.count()
+            stime = df.select(min(df["TimeStamp"])).head()[0]
+            etime = df.select(max(df["TimeStamp"])).head()[0]
+
+            with open(filename, 'a') as myfile:
+                myfile.write(">> "+str(num)+" Records Collected\n")
+                myfile.write(">> Start time is: "+str(datetime.fromtimestamp(stime))+'\n')
+                myfile.write(">> End time is: "+str(datetime.fromtimestamp(etime))+'\n')
+
             dfrdd = df.rdd.map(list)
             method(dfrdd)
 
@@ -557,8 +578,9 @@ def compute_window_check(interval: int, datapath: str): # sensor fields number g
             # df.show()
 
         else:
+            with open(filename, 'a') as myfile:
+                myfile.write("Sorry. No data available\n")
             print ("Sorry. No data available")
-        ###### end #####
 
         # path = "2e2578ed-e064-407e-b64b-085033700ec5.gz,28d64dad-2328-461c-8267-0e64ea6810fc.gz"
         # df = spark.read.format("csv").option("header","False").load(path.split(','))
@@ -592,9 +614,11 @@ consumer_group_id = "md2k-test"+str(group_id)
 
 file_name = sys.argv[3]
 virtual_sensor = read_udf(archive_path, file_name)
+
 sensor_id = virtual_sensor[0]
 interval = int(virtual_sensor[2])
 udf_function = virtual_sensor[4]
+result_file = "../"+virtual_sensor[1]
 
 # Load user defined process
 module_cus = import_module(udf_function)
@@ -605,7 +629,7 @@ method = getattr(module_cus, "process")
 print ("User Query -> Compute Window:"+str(interval)+", From:", sensor_id)
 print ("User Query -> Detailed Info:", virtual_sensor)
 
-compute = Thread(target=compute_window_check, args=(interval, data_path))
+compute = Thread(target=compute_window_check, args=(interval, data_path, result_file))
 compute.start()
 
 kafka_files_stream = spark_kafka_consumer(["filequeue"], ssc, broker, consumer_group_id)

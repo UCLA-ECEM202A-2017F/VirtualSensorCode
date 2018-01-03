@@ -7,7 +7,7 @@ How to run: (single virtual sensor)
 
 -- wait 6 seconds
 
-2. python3 autosend (start sending data)
+2. python3 autosend.py (start sending data)
 
 How to run: (multiple virtual sensor)
 
