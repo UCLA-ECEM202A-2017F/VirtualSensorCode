@@ -309,7 +309,7 @@ def spark_kafka_consumer(kafka_topic: str, ssc, broker, consumer_group_id) -> Ka
     """
     try:
         offsets = CC.get_kafka_offsets(kafka_topic[0])
-        # offsets = False  # when out of range, reset
+        offsets = False  # when out of range, reset
         if bool(offsets):
             fromOffset = {}
             for offset in offsets:
@@ -325,7 +325,7 @@ def spark_kafka_consumer(kafka_topic: str, ssc, broker, consumer_group_id) -> Ka
                                                  {"metadata.broker.list": broker,
                                                   "group.id": consumer_group_id},fromOffsets=fromOffset)
         else:
-            offset_reset = "smallest"  # smallest OR largest
+            offset_reset = "largest"  # smallest OR largest
             return KafkaUtils.createDirectStream(ssc, kafka_topic,
                                                  {"metadata.broker.list": broker, "auto.offset.reset":offset_reset,
                                                   "group.id": consumer_group_id})
