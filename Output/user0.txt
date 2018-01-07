@@ -1,0 +1,37 @@
+Virtual Sensor Result:
+=== Window starting from: 2017-12-13 23:35:10 with file length: 0 ===
+Sorry. No data available
+=== Window starting from: 2017-12-13 23:35:20 with file length: 2 ===
+>> 10 Records Collected
+>> Start time is: 2017-12-13 23:35:20
+>> End time is: 2017-12-13 23:35:29
+avg(Value[0]): 0.5350452561641472
+avg(Value[1]): 0.49358268060464283
+avg(Value[2]): 0.5380727481792389
+max(Value[0]): 0.9653392823166269
+max(Value[1]): 0.9792005757656065
+max(Value[2]): 0.9817670556826696
+=== Window starting from: 2017-12-13 23:35:30 with file length: 1 ===
+>> 7 Records Collected
+>> Start time is: 2017-12-13 23:35:30
+>> End time is: 2017-12-13 23:35:36
+avg(Value[0]): 0.6149115041106422
+avg(Value[1]): 0.34919508295424434
+avg(Value[2]): 0.45188243813848566
+max(Value[0]): 0.8196614904954217
+max(Value[1]): 0.6086064859705735
+max(Value[2]): 0.6652361816287197
+=== Window starting from: 2017-12-13 23:35:40 with file length: 1 ===
+>> 6 Records Collected
+>> Start time is: 2017-12-13 23:35:40
+>> End time is: 2017-12-13 23:35:45
+avg(Value[0]): 0.5102197699867511
+avg(Value[1]): 0.4158780266665279
+avg(Value[2]): 0.3145322612646627
+max(Value[0]): 0.7454329774198618
+max(Value[1]): 0.7339509828003965
+max(Value[2]): 0.7293683709326104
+=== Window starting from: 2017-12-13 23:35:50 with file length: 0 ===
+Sorry. No data available
+=== Window starting from: 2017-12-13 23:36:00 with file length: 0 ===
+Sorry. No data available

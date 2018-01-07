@@ -29,3 +29,5 @@ Arriving Files:
 
 Virtual sensor start time: 23:35:10
 Processing interval: As user defined (> 10s)
+
+ss_session.py utilizes spark structure streaming
