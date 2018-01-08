@@ -648,6 +648,8 @@ df = df.withColumn("TimeStamp", df.TimeStamp.cast("long")) \
     .withColumn("Offset", df.Offset.cast("long")) \
     .withColumn("col3", myttl(df.col3)).drop("value")
 
+df = df.withColumn("TimeStamp", df.TimeStamp.cast("timestamp"))
+
 # customized process
 # windowedCounts = df.select(mean(df.col3[0]),mean(df.col3[1]),mean(df.col3[2]))
 windowedCounts = method(df)
