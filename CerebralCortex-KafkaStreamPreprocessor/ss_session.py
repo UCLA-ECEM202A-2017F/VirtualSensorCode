@@ -14,6 +14,7 @@ from pyspark.ml.feature import Tokenizer, RegexTokenizer, StopWordsRemover, Coun
 ##########################################
 import json
 import os
+import imp
 from cerebralcortex.kernel.datatypes.datastream import DataStream
 from datetime import datetime
 from cerebralcortex.kernel.utils.logging import cc_log
@@ -29,7 +30,7 @@ CC = CerebralCortex(configuration_file, time_zone="America/Los_Angeles", load_sp
 
 ################################## Global variables
 # filelist = []
-cur_time = 1513236910 #hard coded, should use datetime.now() in the future
+# cur_time = 1513236910 #hard coded, should use datetime.now() in the future
 # let user define start time
 
 ###################################
@@ -603,6 +604,10 @@ interval = int(virtual_sensor[2])
 # user defined process
 udf_function = virtual_sensor[4]
 
+# start time
+cur_time = int(virtual_sensor[3])
+ost = cur_time % 10
+
 # output file
 result_file = "../"+virtual_sensor[1]
 
@@ -614,7 +619,8 @@ sensor_path = virtual_sensor_datapath+sensor_id+'/'
 os.makedirs(os.path.dirname(sensor_path), exist_ok=True)
 
 # Load user defined process
-module_cus = import_module(udf_function)
+# module_cus = import_module(udf_function)
+module_cus = imp.load_source(udf_function, "../UDF/"+udf_function+".py")
 # reload(module_cus)
 method = getattr(module_cus, "process")
 # method is now the function that could be used directly as method(testrdd)
@@ -650,20 +656,28 @@ df = df.withColumn("TimeStamp", df.TimeStamp.cast("long")) \
 
 df = df.withColumn("TimeStamp", df.TimeStamp.cast("timestamp"))
 
+gp = df.withWatermark("TimeStamp", "30 seconds")\
+    .groupBy(window("TimeStamp", "10 seconds", "10 seconds", str(ost)+" seconds"))
+
 # customized process
 # windowedCounts = df.select(mean(df.col3[0]),mean(df.col3[1]),mean(df.col3[2]))
-windowedCounts = method(df)
+windowedCounts = method(gp, df)
+
+windowedCounts = windowedCounts.withColumn("start", windowedCounts.window.start.cast("string"))\
+                .withColumn("end", windowedCounts.window.end.cast("string")).drop("window")\
+                .withColumn("sid", lit(sensor_id))
 
 kafka_files_stream = spark_kafka_consumer(["filequeue"], ssc, broker, consumer_group_id)
 kafka_files_stream.foreachRDD(lambda rdd: process_valid_file(rdd, data_path, virtual_sensor_datapath, sensor_id, interval)) # store or create DF() process
 
 # Start running the query that prints the windowed word counts to the console
+# update result (query) every 10 seconds
 query = windowedCounts\
     .writeStream\
     .outputMode('complete')\
     .format('console')\
     .option('truncate', 'false') \
-    .trigger(processingTime="10 seconds").start()
+    .trigger(processingTime=str(interval)+" seconds").start()
 
 ssc.start()
 ssc.awaitTermination()
