@@ -1,0 +1,1 @@
+{"input_id": "tywgayz911oztg0werlc458f3fbcyau7jfw5", "output_id": "user2.txt", "interval": "30", "start_time": "1513236956", "end_time": "1513237000", "process": "udf_ss3", "folder": "V2_data", "window": "40 seconds ", "sliding_window": "20 seconds"}

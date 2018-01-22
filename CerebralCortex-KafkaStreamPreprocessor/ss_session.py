@@ -475,15 +475,15 @@ def process_valid_file(message: KafkaDStream, data_path: str, v_path: str, senso
     :param message:
     """
 
-    print("====== Processing in process_valid_file ======")
+    # print("====== Processing in process_valid_file ======")
     records = message.map(lambda r: json.loads(r[1])) # matadata & filename
     # print(records.collect())
     valid_records = records.filter(lambda rdd: verify_fields(rdd, data_path))
-    print("File Iteration count-valid_records:", valid_records.count())
+    # print("File Iteration count-valid_records:", valid_records.count())
 
-    print("====== Processing in verify_sid ======")
+    # print("====== Processing in verify_sid ======")
     valid_sensors = valid_records.filter(lambda rdd: verify_sid(rdd, sensor_id, data_path))
-    print("File Iteration count-valid_sensors:", valid_sensors.count())
+    # print("File Iteration count-valid_sensors:", valid_sensors.count())
     # print(valid_sensors.collect())
 
     print("====== Processing in extract_info ======")
@@ -492,7 +492,7 @@ def process_valid_file(message: KafkaDStream, data_path: str, v_path: str, senso
     # now just the file within window
     print("Result is: ")
     print(results.collect())
-    print("File Iteration results:", results.count())
+    # print("File Iteration results:", results.count())
 
     ################### update buffer (old)
     # global filelist
@@ -510,9 +510,13 @@ def read_udf(data_path: str, file_name: str):
         sid = dt['input_id']
         osid = dt['output_id']
         time_interval = dt['interval'] # output every interval time
+        startt = dt['start_time']
         endt = dt['end_time']
         process = dt['process'] # module.process
-    return [sid, osid, time_interval, endt, process]
+        folder = dt['folder']
+        win = dt['window']
+        slid_win = dt['sliding_window']
+    return [sid, osid, time_interval, startt, endt, process, folder, win, slid_win]
 
 
 ###### preparing RDD/df for process old method ######
@@ -602,7 +606,7 @@ sensor_id = virtual_sensor[0]
 interval = int(virtual_sensor[2])
 
 # user defined process
-udf_function = virtual_sensor[4]
+udf_function = virtual_sensor[5]
 
 # start time
 cur_time = int(virtual_sensor[3])
@@ -612,7 +616,16 @@ ost = cur_time % 10
 result_file = "../"+virtual_sensor[1]
 
 # virtual sensor path (user specifiers in input)
-virtual_sensor_datapath = "/Users/Shengfei/Desktop/cerebralcortex/V0_data/"
+prefix = "/Users/Shengfei/Desktop/cerebralcortex/"
+virtual_sensor_datapath = prefix+virtual_sensor[6]+'/'
+
+# window & slidingg windows
+win = virtual_sensor[7]
+swin = virtual_sensor[8]
+
+if int(swin.split(" ")[0]) <= ost:
+    ost = ost - int(swin.split(" ")[0])
+
 os.makedirs(os.path.dirname(virtual_sensor_datapath), exist_ok=True)
 # now supporting one sensor
 sensor_path = virtual_sensor_datapath+sensor_id+'/'
@@ -657,7 +670,7 @@ df = df.withColumn("TimeStamp", df.TimeStamp.cast("long")) \
 df = df.withColumn("TimeStamp", df.TimeStamp.cast("timestamp"))
 
 gp = df.withWatermark("TimeStamp", "30 seconds")\
-    .groupBy(window("TimeStamp", "10 seconds", "10 seconds", str(ost)+" seconds"))
+    .groupBy(window("TimeStamp", win, swin, str(ost)+" seconds"))
 
 # customized process
 # windowedCounts = df.select(mean(df.col3[0]),mean(df.col3[1]),mean(df.col3[2]))

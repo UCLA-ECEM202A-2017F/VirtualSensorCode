@@ -14,6 +14,9 @@ export PATH=$SPARK_HOME/bin:$PATH
 
 export SPARK_MASTER_OPTS="-Dspark.deploy.defaultCores=1"
 
-spark-submit --master spark://127.0.0.1:8080 --packages org.apache.spark:spark-streaming-kafka-0-8_2.11:2.2.0,com.datastax.spark:spark-cassandra-connector_2.11:2.0.1 ss_session.py /Users/Shengfei/Desktop/cerebralcortex/data/ /Users/Shengfei/Desktop/cerebralcortex/Archive/ user_query.json 2
+spark-submit --master spark://127.0.0.1:8081 --packages org.apache.spark:spark-streaming-kafka-0-8_2.11:2.2.0,com.datastax.spark:spark-cassandra-connector_2.11:2.0.1 ss_session.py /Users/Shengfei/Desktop/cerebralcortex/data/ /Users/Shengfei/Desktop/cerebralcortex/Archive/ user_query0.json 2
+# spark-submit --master spark://127.0.0.1:8082 --packages org.apache.spark:spark-streaming-kafka-0-8_2.11:2.2.0,com.datastax.spark:spark-cassandra-connector_2.11:2.0.1 ss_session.py /Users/Shengfei/Desktop/cerebralcortex/data/ /Users/Shengfei/Desktop/cerebralcortex/Archive/ user_query1.json 3
+# spark-submit --master spark://127.0.0.1:8084 --packages org.apache.spark:spark-streaming-kafka-0-8_2.11:2.2.0,com.datastax.spark:spark-cassandra-connector_2.11:2.0.1 ss_session.py /Users/Shengfei/Desktop/cerebralcortex/data/ /Users/Shengfei/Desktop/cerebralcortex/Archive/ user_query2.json 4
+
 
 #spark-submit --conf spark.cores.max=1 --master spark://127.0.0.1:8083 --packages org.apache.spark:spark-streaming-kafka-0-8_2.11:2.2.0,com.datastax.spark:spark-cassandra-connector_2.11:2.0.1 main.py /Users/Shengfei/Desktop/cerebralcortex/data/
