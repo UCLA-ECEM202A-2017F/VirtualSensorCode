@@ -38,6 +38,7 @@ Step 3: (optional data input):
 2) Note that the datapool only contains 3 sensors' dataset. Ideally you use real data from the phone/Internet
 
 =========================================================
+
 Generating virtual sensor & user defined process:
 
 1) Run python3 user_define.py to generate virtual sensor. 9 Input fields are supported (refer to the slide please)
@@ -47,6 +48,7 @@ Generating virtual sensor & user defined process:
    The return type is also an aggregated spark dataframe.
 
 =========================================================
+
 Folder explaination:
 
 1) VirtualSensor: the folder to drag your user query json file (virtual sensor) in
@@ -65,6 +67,7 @@ On exit:
 3) Stop all spark masters and slaves (refer to the script in main_chack.py)
 
 =========================================================
+
 Others:
 
 **Datapool Data Format:
