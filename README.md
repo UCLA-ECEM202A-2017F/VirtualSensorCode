@@ -3,6 +3,7 @@
 Please refer to: https://docs.google.com/document/d/1s3DBRgEEIY_mqR0ILydAJdFmiNjfmDeQzXpoN5Bn6C4/edit for initial setup
 
 =========================================================
+
 Step 1:
 
 1) In setup.sh, modify the Spark path on line 7 and line 17~29
@@ -56,6 +57,7 @@ Folder explaination:
 6) V0_data/V1_data...: These folder will be generated during runtime. It seperates the files required by each virtual sensor
 
 =========================================================
+
 On exit:
 
 1) Please delete all the V0_data/V1_data.... files
